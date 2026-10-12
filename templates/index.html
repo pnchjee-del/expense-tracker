@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1E3A8A">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Expenses">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <title>Personal Expense Control Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Dashboard Header Panel -->
+        <header class="mb-8 border-b border-gray-200 pb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-bold text-blue-900">Expense Control Center</h1>
+                <p class="text-gray-500 text-sm mt-1">Track expenditures, manage item inventory, and build structural summaries.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+                <button id="installAppBtn" type="button" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-3 rounded-lg shadow-md transition flex items-center gap-2 text-sm cursor-pointer">
+                    <span>📲</span>
+                    <span>Install Android App</span>
+                </button>
+                <div class="bg-blue-900 text-white px-6 py-3 rounded-lg shadow-md text-right">
+                    <span class="text-xs uppercase tracking-wide block opacity-75">All-Time Expenditure</span>
+                    <span class="text-2xl font-black">₹ {{ "{:,.2f}".format(total_amount) }}</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Left Grid Pane: Input Formulations -->
+            <div class="space-y-6 lg:col-span-1">
+                
+                <!-- Card Container 1: Auto-calculating Input Form -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                        📥 Record New Expenditure
+                    </h2>
+                    <form action="{{ url_for('add_expense') }}" method="POST" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">Date</label>
+                            <input type="date" name="date" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm outline-none">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">Category Grouping</label>
+                            <select name="category" id="categorySelect" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white outline-none">
+                                <option value="" disabled selected>Choose a category list...</option>
+                                {% for cat in categories %}
+                                    <option value="{{ cat }}">{{ cat.title() }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">Item Title Description</label>
+                            <input type="text" name="item_name" id="itemInput" list="itemSuggestions" required autocomplete="off" placeholder="Start typing item..." class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm outline-none">
+                            <datalist id="itemSuggestions"></datalist>
+                        </div>
+
+                        <!-- Row: Quantity & Unit Selector -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">Quantity</label>
+                                <input type="number" step="any" name="quantity" id="calcQty" value="1" min="0.001" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">Unit</label>
+                                <select name="unit" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white outline-none">
+                                    {% for unit in units %}
+                                        <option value="{{ unit }}">{{ unit }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Row: Rate & Target Calculated Purchase Price Display -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">Rate (per Unit)</label>
+                                <input type="number" step="0.01" name="rate" id="calcRate" value="0.00" min="0" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold uppercase text-gray-400 mb-1">Purchase Price</label>
+                                <input type="text" id="calcTotal" readonly value="₹ 0.00" class="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-md font-bold text-gray-600 outline-none select-none">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-medium py-2 px-4 rounded-md transition shadow-sm cursor-pointer mt-2">
+                            Submit Entry Record
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Card Container 2: Document Engine -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                        📄 Compile PDF Document
+                    </h2>
+                    <form action="{{ url_for('generate_report') }}" method="GET" target="_blank" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">From Date</label>
+                            <input type="date" name="start_date" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-gray-500 mb-1">To Date</label>
+                            <input type="date" name="end_date" required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm outline-none">
+                        </div>
+                        <button type="submit" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-medium py-2 px-4 rounded-md transition shadow-sm cursor-pointer">
+                            Export PDF Ledger
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+
+            <!-- Right Grid Pane: Visualization Matrix + Ledger Logs Table -->
+            <div class="lg:col-span-2 space-y-8">
+                
+                <!-- Data Visualization Charts Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Category Distribution</h3>
+                        <div class="relative h-64 flex justify-center items-center">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Monthly Spending Trajectory</h3>
+                        <div class="relative h-64 flex justify-center items-center">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detailed Ledger Logs Table -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-6 border-b border-gray-100">
+                        <h2 class="text-lg font-bold text-gray-900">Historical Master Ledger Log</h2>
+                        <p class="text-xs text-gray-400 mt-0.5">Comprehensive item matrix logs index.</p>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50 text-gray-500 text-xs font-semibold uppercase border-b border-gray-200">
+                                    <th class="px-4 py-3">Date</th>
+                                    <th class="px-4 py-3">Category</th>
+                                    <th class="px-4 py-3">Item Descriptor</th>
+                                    <th class="px-4 py-3 text-right">Qty</th>
+                                    <th class="px-4 py-3 text-right">Rate</th>
+                                    <th class="px-4 py-3 text-right">Total Purchase Price</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 text-sm">
+                                {% for expense in expenses %}
+                                <tr class="hover:bg-gray-50/70 transition">
+                                    <td class="px-4 py-4 whitespace-nowrap text-gray-600">{{ expense.date.strftime('%d-%m-%Y') }}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap">
+                                        <span class="px-2.5 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-full capitalize">
+                                            {{ expense.category }}
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-4 font-medium text-gray-800">{{ expense.item_name }}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-right text-gray-600">{{ "{:g}".format(expense.quantity) }} {{ expense.unit }}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-right text-gray-600">₹ {{ "{:,.2f}".format(expense.rate) }}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-right font-bold text-gray-900">₹ {{ "{:,.2f}".format(expense.amount) }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="px-4 py-8 text-center text-gray-400 italic">
+                                        No expense records found. Add your first expenditure on the left.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Android Installation Helper Modal -->
+    <div id="installModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="text-lg font-bold text-blue-900 flex items-center gap-2">
+                    <span>📲</span> Install on Android
+                </h3>
+                <button id="closeInstallModal" type="button" class="text-gray-400 hover:text-gray-600 text-xl leading-none cursor-pointer">&times;</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-4">
+                Install <strong>Expense Control Center</strong> on your Android home screen for full-screen standalone access:
+            </p>
+            <ol class="text-sm text-gray-700 space-y-2.5 list-decimal list-inside bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <li>Open this page in <strong>Chrome</strong> on your Android phone.</li>
+                <li>Tap the three-dot menu <strong>(⋮)</strong> in the top-right corner.</li>
+                <li>Select <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong>.</li>
+                <li>Tap <strong>Install / Add</strong> to place the app icon on your phone.</li>
+            </ol>
+            <button id="gotItInstallBtn" type="button" class="mt-5 w-full bg-blue-700 hover:bg-blue-800 text-white font-medium py-2 px-4 rounded-md transition cursor-pointer">
+                Got It
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Register PWA Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch((err) => {
+                    console.error('Service Worker registration failed:', err);
+                });
+            });
+        }
+
+        // Handle PWA Install Prompt for Android & Desktop
+        let deferredInstallPrompt = null;
+        const installAppBtn = document.getElementById('installAppBtn');
+        const installModal = document.getElementById('installModal');
+        const closeInstallModal = document.getElementById('closeInstallModal');
+        const gotItInstallBtn = document.getElementById('gotItInstallBtn');
+
+        // Hide install button if already running as installed standalone app
+        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+            if (installAppBtn) installAppBtn.classList.add('hidden');
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredInstallPrompt = e;
+            if (installAppBtn) installAppBtn.classList.remove('hidden');
+        });
+
+        window.addEventListener('appinstalled', () => {
+            deferredInstallPrompt = null;
+            if (installAppBtn) installAppBtn.classList.add('hidden');
+        });
+
+        if (installAppBtn) {
+            installAppBtn.addEventListener('click', async () => {
+                if (deferredInstallPrompt) {
+                    deferredInstallPrompt.prompt();
+                    const { outcome } = await deferredInstallPrompt.userChoice;
+                    if (outcome === 'accepted') {
+                        deferredInstallPrompt = null;
+                    }
+                } else if (installModal) {
+                    installModal.classList.remove('hidden');
+                    installModal.classList.add('flex');
+                }
+            });
+        }
+
+        function hideModal() {
+            if (installModal) {
+                installModal.classList.add('hidden');
+                installModal.classList.remove('flex');
+            }
+        }
+
+        if (closeInstallModal) closeInstallModal.addEventListener('click', hideModal);
+        if (gotItInstallBtn) gotItInstallBtn.addEventListener('click', hideModal);
+        if (installModal) {
+            installModal.addEventListener('click', (e) => {
+                if (e.target === installModal) hideModal();
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set default date to today on the entry form
+            const dateInput = document.querySelector('input[name="date"]');
+            if (dateInput && !dateInput.value) {
+                dateInput.valueAsDate = new Date();
+            }
+
+            // Live Purchase Price calculation (Quantity * Rate)
+            const qtyInput = document.getElementById('calcQty');
+            const rateInput = document.getElementById('calcRate');
+            const totalInput = document.getElementById('calcTotal');
+
+            function updateCalculatedTotal() {
+                const qty = parseFloat(qtyInput.value) || 0;
+                const rate = parseFloat(rateInput.value) || 0;
+                const total = qty * rate;
+                totalInput.value = '₹ ' + total.toLocaleString('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+            }
+
+            qtyInput.addEventListener('input', updateCalculatedTotal);
+            rateInput.addEventListener('input', updateCalculatedTotal);
+
+            // Dynamic Item Autocomplete based on selected Category
+            const categorySelect = document.getElementById('categorySelect');
+            const datalist = document.getElementById('itemSuggestions');
+
+            categorySelect.addEventListener('change', async () => {
+                const category = categorySelect.value;
+                datalist.innerHTML = '';
+                if (!category) return;
+
+                try {
+                    const response = await fetch(`/api/get_items?category=${encodeURIComponent(category)}`);
+                    if (response.ok) {
+                        const items = await response.json();
+                        items.forEach(item => {
+                            const option = document.createElement('option');
+                            option.value = item;
+                            datalist.appendChild(option);
+                        });
+                    }
+                } catch (err) {
+                    console.error('Failed to load item suggestions:', err);
+                }
+            });
+
+            // Load and render Chart.js visualizations
+            async function loadCharts() {
+                try {
+                    const response = await fetch('/api/spending_summary');
+                    if (!response.ok) return;
+                    const data = await response.json();
+
+                    const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+                    new Chart(categoryCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: data.categories,
+                            datasets: [{
+                                data: data.category_totals,
+                                backgroundColor: [
+                                    '#1E40AF',
+                                    '#047857',
+                                    '#D97706',
+                                    '#7C3AED',
+                                    '#DB2777'
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: { boxWidth: 12, font: { size: 11 } }
+                                }
+                            }
+                        }
+                    });
+
+                    const trendCtx = document.getElementById('trendChart').getContext('2d');
+                    new Chart(trendCtx, {
+                        type: 'line',
+                        data: {
+                            labels: data.trend_labels,
+                            datasets: [{
+                                label: 'Monthly Spend (₹)',
+                                data: data.trend_totals,
+                                borderColor: '#1D4ED8',
+                                backgroundColor: 'rgba(29, 78, 216, 0.1)',
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 4,
+                                pointBackgroundColor: '#1D4ED8'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            }
+                        }
+                    });
+                } catch (err) {
+                    console.error('Failed to load chart summary:', err);
+                }
+            }
+
+            loadCharts();
+        });
+    </script>
+</body>
+</html>
