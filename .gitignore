@@ -7,3 +7,4 @@ instance/
 .venv/
 venv/
 env/
+android_app/build/

@@ -184,6 +184,15 @@ def service_worker():
 def manifest():
     return send_file('static/manifest.json', mimetype='application/manifest+json')
 
+@app.route('/download_apk', methods=['GET'])
+def download_apk():
+    return send_file(
+        'static/ExpenseTracker.apk',
+        as_attachment=True,
+        download_name='ExpenseTracker.apk',
+        mimetype='application/vnd.android.package-archive'
+    )
+
 with app.app_context():
     db.create_all()
 

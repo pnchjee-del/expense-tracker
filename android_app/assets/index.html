@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Expense Control Center</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #EEF2FF 0%, #FAF5FF 50%, #FDF2F8 100%);
+            color: #1F2937;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .header {
+            border-bottom: 1px solid rgba(199, 210, 254, 0.8);
+            padding-bottom: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        @media (min-width: 640px) {
+            .header { flex-direction: row; justify-content: space-between; align-items: center; }
+        }
+        .title {
+            font-size: 24px;
+            font-weight: 800;
+            background: linear-gradient(90deg, #4338CA, #7E22CE, #DB2777);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: #4338CA;
+        }
+        .subtitle { font-size: 13px; color: #4338CA; opacity: 0.75; margin-top: 4px; font-weight: 500; }
+        .total-badge {
+            background: linear-gradient(90deg, #3730A3, #6B21A8, #1E3A8A);
+            color: #FFFFFF;
+            padding: 12px 20px;
+            border-radius: 14px;
+            box-shadow: 0 6px 16px rgba(55, 48, 163, 0.25);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+        }
+        .total-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #C7D2FE; font-weight: 700; }
+        .total-value { font-size: 22px; font-weight: 900; color: #FCD34D; }
+        .grid-main { display: grid; grid-template-columns: 1fr; gap: 20px; }
+        @media (min-width: 960px) { .grid-main { grid-template-columns: 360px 1fr; } }
+        .card {
+            background: #FFFFFF;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            margin-bottom: 20px;
+            border: 1px solid #E0E7FF;
+        }
+        .card-emerald { border-color: #A7F3D0; }
+        .card-banner-purple {
+            background: linear-gradient(90deg, #4F46E5, #9333EA, #EC4899);
+            color: #FFFFFF;
+            padding: 14px 18px;
+        }
+        .card-banner-emerald {
+            background: linear-gradient(90deg, #059669, #0D9488);
+            color: #FFFFFF;
+            padding: 14px 18px;
+        }
+        .card-banner h2 { font-size: 16px; font-weight: 700; }
+        .card-banner p { font-size: 11px; opacity: 0.9; margin-top: 2px; }
+        .card-body { padding: 18px; }
+        .field { margin-bottom: 14px; }
+        .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+        .lbl-indigo { color: #4338CA; }
+        .lbl-purple { color: #7E22CE; }
+        .lbl-pink { color: #BE185D; }
+        .lbl-amber { color: #B45309; }
+        .lbl-teal { color: #0F766E; }
+        .lbl-blue { color: #1D4ED8; }
+        .lbl-emerald { color: #047857; }
+        input, select {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.15s ease;
+        }
+        .inp-indigo { border: 1.5px solid #C7D2FE; background: #EEF2FF; }
+        .inp-indigo:focus { border-color: #6366F1; background: #FFF; }
+        .inp-purple { border: 1.5px solid #E9D5FF; background: #FAF5FF; }
+        .inp-purple:focus { border-color: #A855F7; background: #FFF; }
+        .inp-pink { border: 1.5px solid #FBCFE8; background: #FDF2F8; }
+        .inp-pink:focus { border-color: #EC4899; background: #FFF; }
+        .inp-amber { border: 1.5px solid #FDE68A; background: #FFFBEB; }
+        .inp-amber:focus { border-color: #F59E0B; background: #FFF; }
+        .inp-teal { border: 1.5px solid #99F6E4; background: #F0FDFA; }
+        .inp-teal:focus { border-color: #14B8A6; background: #FFF; }
+        .inp-blue { border: 1.5px solid #BFDBFE; background: #EFF6FF; }
+        .inp-blue:focus { border-color: #3B82F6; background: #FFF; }
+        .inp-emerald { border: 1.5px solid #A7F3D0; background: #ECFDF5; }
+        .inp-emerald:focus { border-color: #10B981; background: #FFF; }
+        .calc-box {
+            border: 2px solid #6EE7B7;
+            background: linear-gradient(90deg, #ECFDF5, #CCFBF1);
+            color: #065F46;
+            font-weight: 800;
+        }
+        .btn {
+            width: 100%;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #FFFFFF;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+        }
+        .btn-purple { background: linear-gradient(90deg, #4F46E5, #9333EA, #DB2777); }
+        .btn-emerald { background: linear-gradient(90deg, #059669, #0D9488); }
+        .charts-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 20px; }
+        @media (min-width: 640px) { .charts-grid { grid-template-columns: 1fr 1fr; } }
+        .chart-card { background: #FFF; border-radius: 16px; padding: 16px; border: 1px solid #E5E7EB; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .chart-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #374151; letter-spacing: 0.05em; margin-bottom: 10px; }
+        .chart-wrap { width: 100%; height: 220px; position: relative; }
+        canvas { width: 100%; height: 100%; }
+        .table-header { padding: 16px 18px; border-bottom: 1px solid #F3F4F6; }
+        .table-header h2 { font-size: 16px; font-weight: 700; color: #111827; }
+        .table-header p { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th {
+            background: #F9FAFB;
+            color: #6B7280;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        td { padding: 12px; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
+        .text-right { text-align: right; }
+        .cat-pill {
+            display: inline-block;
+            padding: 3px 9px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #EEF2FF;
+            color: #4338CA;
+            border-radius: 999px;
+            text-transform: capitalize;
+        }
+        .del-btn {
+            background: #FEE2E2;
+            color: #B91C1C;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1E1B4B;
+            color: #FFF;
+            padding: 10px 18px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+            display: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div>
+                <h1 class="title">Expense Control Center</h1>
+                <p class="subtitle">Standalone Android Edition • Offline Ledger & PDF Engine</p>
+            </div>
+            <div class="total-badge">
+                <span class="total-label">All-Time Expenditure</span>
+                <span class="total-value" id="allTimeTotal">₹ 0.00</span>
+            </div>
+        </header>
+
+        <div class="grid-main">
+            <div>
+                <!-- Card 1: Record New Expenditure -->
+                <div class="card">
+                    <div class="card-banner card-banner-purple">
+                        <h2>📥 Record New Expenditure</h2>
+                        <p>Enter item details to auto-calculate total spend</p>
+                    </div>
+                    <div class="card-body">
+                        <form id="expenseForm">
+                            <div class="field">
+                                <label class="lbl-indigo">📅 Date</label>
+                                <input type="date" id="expDate" required class="inp-indigo">
+                            </div>
+
+                            <div class="field">
+                                <label class="lbl-purple">🏷️ Category Grouping</label>
+                                <select id="categorySelect" required class="inp-purple">
+                                    <option value="" disabled selected>Choose a category list...</option>
+                                    <option value="grocery">Grocery</option>
+                                    <option value="vegetables">Vegetables</option>
+                                    <option value="fish & meat">Fish & Meat</option>
+                                    <option value="cosmetics">Cosmetics</option>
+                                    <option value="cleaning materials">Cleaning Materials</option>
+                                </select>
+                            </div>
+
+                            <div class="field">
+                                <label class="lbl-pink">🛒 Item Title Description</label>
+                                <input type="text" id="itemInput" list="itemSuggestions" required autocomplete="off" placeholder="Start typing item..." class="inp-pink">
+                                <datalist id="itemSuggestions"></datalist>
+                            </div>
+
+                            <div class="row-2 field">
+                                <div>
+                                    <label class="lbl-amber">🔢 Quantity</label>
+                                    <input type="number" step="any" id="calcQty" value="1" min="0.001" required class="inp-amber">
+                                </div>
+                                <div>
+                                    <label class="lbl-teal">⚖️ Unit</label>
+                                    <select id="expUnit" required class="inp-teal">
+                                        <option value="Kg">Kg</option>
+                                        <option value="Gm">Gm</option>
+                                        <option value="Litre">Litre</option>
+                                        <option value="Ml">Ml</option>
+                                        <option value="Pcs">Pcs</option>
+                                        <option value="Packet">Packet</option>
+                                        <option value="Box">Box</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row-2 field">
+                                <div>
+                                    <label class="lbl-blue">💵 Rate (per Unit)</label>
+                                    <input type="number" step="0.01" id="calcRate" value="0.00" min="0" required class="inp-blue">
+                                </div>
+                                <div>
+                                    <label class="lbl-emerald">💰 Purchase Price</label>
+                                    <input type="text" id="calcTotal" readonly value="₹ 0.00" class="calc-box">
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-purple">✨ Submit Entry Record</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Card 2: Compile PDF Document -->
+                <div class="card card-emerald">
+                    <div class="card-banner card-banner-emerald">
+                        <h2>📄 Compile PDF Document</h2>
+                        <p>Save a formatted PDF statement by date range</p>
+                    </div>
+                    <div class="card-body">
+                        <form id="pdfForm">
+                            <div class="field">
+                                <label class="lbl-emerald">📆 From Date</label>
+                                <input type="date" id="startDate" required class="inp-emerald">
+                            </div>
+                            <div class="field">
+                                <label class="lbl-teal">📆 To Date</label>
+                                <input type="date" id="endDate" required class="inp-teal">
+                            </div>
+                            <button type="submit" class="btn btn-emerald">📥 Export PDF Ledger</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <div class="chart-title">Category Distribution</div>
+                        <div class="chart-wrap">
+                            <canvas id="categoryCanvas"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-title">Monthly Spending Trajectory</div>
+                        <div class="chart-wrap">
+                            <canvas id="trendCanvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="table-header">
+                        <h2>Historical Master Ledger Log</h2>
+                        <p>Stored locally on your Android device</p>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Category</th>
+                                    <th>Item</th>
+                                    <th class="text-right">Qty</th>
+                                    <th class="text-right">Rate</th>
+                                    <th class="text-right">Total</th>
+                                    <th class="text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ledgerBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const CATEGORIES = ['grocery', 'vegetables', 'fish & meat', 'cosmetics', 'cleaning materials'];
+        const COLORS = ['#4F46E5', '#059669', '#D97706', '#9333EA', '#DB2777'];
+        const STORAGE_KEY = 'expense_tracker_standalone_v1';
+
+        let state = { expenses: [], itemsByCategory: {} };
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.style.display = 'block';
+            setTimeout(() => { t.style.display = 'none'; }, 2400);
+        }
+
+        function loadState() {
+            try {
+                let raw = '';
+                if (window.AndroidBridge && typeof window.AndroidBridge.loadData === 'function') {
+                    raw = window.AndroidBridge.loadData();
+                }
+                if (!raw) {
+                    raw = localStorage.getItem(STORAGE_KEY) || '';
+                }
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    state.expenses = Array.isArray(parsed.expenses) ? parsed.expenses : [];
+                    state.itemsByCategory = parsed.itemsByCategory || {};
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function saveState() {
+            const raw = JSON.stringify(state);
+            try { localStorage.setItem(STORAGE_KEY, raw); } catch (e) {}
+            try {
+                if (window.AndroidBridge && typeof window.AndroidBridge.saveData === 'function') {
+                    window.AndroidBridge.saveData(raw);
+                }
+            } catch (e) {}
+        }
+
+        function formatINR(num) {
+            return (Number(num) || 0).toLocaleString('en-IN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function formatDateDMY(ymd) {
+            if (!ymd) return '';
+            const parts = ymd.split('-');
+            if (parts.length !== 3) return ymd;
+            return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+
+        function renderAll() {
+            // Sort descending by date then id
+            const sorted = [...state.expenses].sort((a, b) => {
+                if (a.date !== b.date) return b.date.localeCompare(a.date);
+                return (b.id || 0) - (a.id || 0);
+            });
+
+            const total = sorted.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+            document.getElementById('allTimeTotal').textContent = '₹ ' + formatINR(total);
+
+            const tbody = document.getElementById('ledgerBody');
+            tbody.innerHTML = '';
+
+            if (sorted.length === 0) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="7" style="text-align:center;color:#9CA3AF;padding:28px;font-style:italic;">No expense records found. Add your first expenditure above.</td>`;
+                tbody.appendChild(tr);
+            } else {
+                sorted.forEach(exp => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="white-space:nowrap;color:#4B5563;">${formatDateDMY(exp.date)}</td>
+                        <td><span class="cat-pill">${exp.category}</span></td>
+                        <td style="font-weight:600;color:#1F2937;">${exp.item_name}</td>
+                        <td class="text-right" style="white-space:nowrap;color:#4B5563;">${Number(exp.quantity)} ${exp.unit}</td>
+                        <td class="text-right" style="white-space:nowrap;color:#4B5563;">₹ ${formatINR(exp.rate)}</td>
+                        <td class="text-right" style="white-space:nowrap;font-weight:700;color:#111827;">₹ ${formatINR(exp.amount)}</td>
+                        <td class="text-right"><button type="button" class="del-btn" data-id="${exp.id}">Delete</button></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            tbody.querySelectorAll('.del-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = Number(btn.getAttribute('data-id'));
+                    state.expenses = state.expenses.filter(e => e.id !== id);
+                    saveState();
+                    renderAll();
+                    showToast('Entry deleted');
+                });
+            });
+
+            drawCharts();
+        }
+
+        function drawCharts() {
+            drawCategoryChart();
+            drawTrendChart();
+        }
+
+        function setupCanvas(canvas) {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            return { ctx, w: rect.width, h: rect.height };
+        }
+
+        function drawCategoryChart() {
+            const canvas = document.getElementById('categoryCanvas');
+            const { ctx, w, h } = setupCanvas(canvas);
+            ctx.clearRect(0, 0, w, h);
+
+            const totals = CATEGORIES.map(cat =>
+                state.expenses.filter(e => e.category === cat).reduce((s, e) => s + Number(e.amount || 0), 0)
+            );
+            const sum = totals.reduce((a, b) => a + b, 0);
+
+            const cx = w * 0.36;
+            const cy = h * 0.5;
+            const radius = Math.min(cx, cy) - 16;
+
+            if (sum <= 0) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                ctx.strokeStyle = '#E5E7EB';
+                ctx.lineWidth = 18;
+                ctx.stroke();
+                ctx.fillStyle = '#9CA3AF';
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('No Data', cx, cy + 4);
+            } else {
+                let angle = -Math.PI / 2;
+                totals.forEach((val, idx) => {
+                    if (val <= 0) return;
+                    const slice = (val / sum) * Math.PI * 2;
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.arc(cx, cy, radius, angle, angle + slice);
+                    ctx.closePath();
+                    ctx.fillStyle = COLORS[idx % COLORS.length];
+                    ctx.fill();
+                    angle += slice;
+                });
+                ctx.beginPath();
+                ctx.arc(cx, cy, radius * 0.55, 0, Math.PI * 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fill();
+            }
+
+            // Legend on the right
+            const legendX = w * 0.68;
+            let legendY = 36;
+            ctx.textAlign = 'left';
+            ctx.font = '11px sans-serif';
+            CATEGORIES.forEach((cat, idx) => {
+                ctx.fillStyle = COLORS[idx % COLORS.length];
+                ctx.fillRect(legendX, legendY - 9, 10, 10);
+                ctx.fillStyle = '#374151';
+                const label = cat.replace(/\b\w/g, c => c.toUpperCase());
+                ctx.fillText(label, legendX + 15, legendY);
+                legendY += 28;
+            });
+        }
+
+        function drawTrendChart() {
+            const canvas = document.getElementById('trendCanvas');
+            const { ctx, w, h } = setupCanvas(canvas);
+            ctx.clearRect(0, 0, w, h);
+
+            const asc = [...state.expenses].sort((a, b) => a.date.localeCompare(b.date));
+            const monthMap = {};
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            asc.forEach(e => {
+                const [y, m] = e.date.split('-');
+                const key = `${months[parseInt(m, 10) - 1]} ${y}`;
+                monthMap[key] = (monthMap[key] || 0) + Number(e.amount || 0);
+            });
+
+            const labels = Object.keys(monthMap);
+            const values = Object.values(monthMap);
+            const padL = 48, padR = 16, padT = 20, padB = 32;
+            const plotW = w - padL - padR;
+            const plotH = h - padT - padB;
+
+            ctx.strokeStyle = '#E5E7EB';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(padL, padT);
+            ctx.lineTo(padL, padT + plotH);
+            ctx.lineTo(padL + plotW, padT + plotH);
+            ctx.stroke();
+
+            if (labels.length === 0) {
+                ctx.fillStyle = '#9CA3AF';
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Add expenses to view monthly trend', padL + plotW / 2, padT + plotH / 2);
+                return;
+            }
+
+            const maxVal = Math.max(...values, 100);
+            const pts = values.map((v, i) => {
+                const x = labels.length === 1 ? padL + plotW / 2 : padL + (i / (labels.length - 1)) * plotW;
+                const y = padT + plotH - (v / maxVal) * (plotH - 10);
+                return { x, y, v, label: labels[i] };
+            });
+
+            ctx.beginPath();
+            pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+            ctx.strokeStyle = '#4F46E5';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            pts.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#4F46E5';
+                ctx.fill();
+                ctx.fillStyle = '#6B7280';
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(p.label, p.x, padT + plotH + 16);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('expDate').value = today;
+            document.getElementById('startDate').value = today.slice(0, 8) + '01';
+            document.getElementById('endDate').value = today;
+
+            loadState();
+            renderAll();
+
+            const qtyInput = document.getElementById('calcQty');
+            const rateInput = document.getElementById('calcRate');
+            const totalInput = document.getElementById('calcTotal');
+
+            function updateCalc() {
+                const q = parseFloat(qtyInput.value) || 0;
+                const r = parseFloat(rateInput.value) || 0;
+                totalInput.value = '₹ ' + formatINR(q * r);
+            }
+            qtyInput.addEventListener('input', updateCalc);
+            rateInput.addEventListener('input', updateCalc);
+
+            const categorySelect = document.getElementById('categorySelect');
+            const datalist = document.getElementById('itemSuggestions');
+
+            function updateAutocomplete() {
+                const cat = categorySelect.value;
+                datalist.innerHTML = '';
+                const list = state.itemsByCategory[cat] || [];
+                list.forEach(item => {
+                    const opt = document.createElement('option');
+                    opt.value = item;
+                    datalist.appendChild(opt);
+                });
+            }
+            categorySelect.addEventListener('change', updateAutocomplete);
+
+            document.getElementById('expenseForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const date = document.getElementById('expDate').value;
+                const category = categorySelect.value;
+                const item_name = document.getElementById('itemInput').value.trim();
+                const quantity = parseFloat(qtyInput.value) || 1;
+                const unit = document.getElementById('expUnit').value || 'Pcs';
+                const rate = parseFloat(rateInput.value) || 0;
+                const amount = quantity * rate;
+
+                if (!date || !category || !item_name) return;
+
+                state.expenses.push({
+                    id: Date.now(),
+                    date,
+                    category,
+                    item_name,
+                    quantity,
+                    unit,
+                    rate,
+                    amount
+                });
+
+                if (!state.itemsByCategory[category]) {
+                    state.itemsByCategory[category] = [];
+                }
+                if (!state.itemsByCategory[category].includes(item_name)) {
+                    state.itemsByCategory[category].push(item_name);
+                }
+
+                saveState();
+                renderAll();
+                updateAutocomplete();
+
+                document.getElementById('itemInput').value = '';
+                qtyInput.value = '1';
+                rateInput.value = '0.00';
+                updateCalc();
+                showToast('✨ Expense saved!');
+            });
+
+            document.getElementById('pdfForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const sDate = document.getElementById('startDate').value;
+                const eDate = document.getElementById('endDate').value;
+                if (!sDate || !eDate) return;
+
+                const filtered = state.expenses
+                    .filter(x => x.date >= sDate && x.date <= eDate)
+                    .sort((a, b) => a.date.localeCompare(b.date));
+
+                let grandTotal = 0;
+                const rowsHtml = filtered.map(exp => {
+                    grandTotal += Number(exp.amount || 0);
+                    return `
+                        <tr>
+                            <td>${formatDateDMY(exp.date)}</td>
+                            <td>${exp.category.replace(/\b\w/g, c => c.toUpperCase())}</td>
+                            <td>${exp.item_name}</td>
+                            <td style="text-align:right">${exp.quantity}</td>
+                            <td style="text-align:right">${exp.unit}</td>
+                            <td style="text-align:right">${formatINR(exp.rate)}</td>
+                            <td style="text-align:right">${formatINR(exp.amount)}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                const reportHtml = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="UTF-8">
+                        <style>
+                            body { font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #1A202C; }
+                            h1 { color: #1A365D; font-size: 22px; margin-bottom: 6px; }
+                            p { color: #4A5568; font-size: 12px; margin-bottom: 18px; }
+                            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                            th { background: #2B6CB0; color: #FFFFFF; padding: 8px; text-align: left; }
+                            td { padding: 7px 8px; border-bottom: 1px solid #E2E8F0; background: #F7FAFC; }
+                            .total-row td { background: #FFFFFF; font-weight: bold; border-top: 2px solid #1A365D; }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>Detailed Expense Management Report</h1>
+                        <p>Period: ${formatDateDMY(sDate)} to ${formatDateDMY(eDate)}</p>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Category</th>
+                                    <th>Item Description</th>
+                                    <th style="text-align:right">Qty</th>
+                                    <th style="text-align:right">Unit</th>
+                                    <th style="text-align:right">Rate</th>
+                                    <th style="text-align:right">Total Price</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHtml || '<tr><td colspan="7" style="text-align:center">No records in selected period</td></tr>'}
+                                <tr class="total-row">
+                                    <td colspan="5"></td>
+                                    <td style="text-align:right">Grand Total:</td>
+                                    <td style="text-align:right">₹ ${formatINR(grandTotal)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </body>
+                    </html>
+                `;
+
+                const jobName = `Detailed_Report_${sDate}_to_${eDate}`;
+                if (window.AndroidBridge && typeof window.AndroidBridge.printReport === 'function') {
+                    window.AndroidBridge.printReport(reportHtml, jobName);
+                } else {
+                    const w = window.open('', '_blank');
+                    if (w) {
+                        w.document.write(reportHtml);
+                        w.document.close();
+                        w.print();
+                    }
+                }
+            });
+
+            window.addEventListener('resize', drawCharts);
+        });
+    </script>
+</body>
+</html>
