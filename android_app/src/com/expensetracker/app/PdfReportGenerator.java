@@ -334,3 +334,4 @@ public class PdfReportGenerator {
         return sb.toString().trim();
     }
 }
+

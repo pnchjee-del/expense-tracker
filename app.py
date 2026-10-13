@@ -17,7 +17,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Pre-defined categories
-CATEGORIES = ['grocery', 'vegetables', 'fish & meat', 'cosmetics', 'cleaning materials']
+CATEGORIES = ['grocery', 'vegetables', 'fish & meat', 'cosmetics', 'cleaning materials', 'miscellaneous']
 # Standard list of standard units for selection
 UNITS = ['Kg', 'Gm', 'Litre', 'Ml', 'Pcs', 'Packet', 'Box']
 
