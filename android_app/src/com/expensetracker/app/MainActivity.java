@@ -2,7 +2,9 @@ package com.expensetracker.app;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
 import android.print.PrintAttributes;
 import android.print.PrintDocumentAdapter;
@@ -13,6 +15,9 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
+
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -95,6 +100,53 @@ public class MainActivity extends Activity {
                 fos.flush();
                 fos.close();
             } catch (Exception ignored) {
+            }
+        }
+
+        @JavascriptInterface
+        public String generatePdf(final String jsonExpenses, final String startDate, final String endDate) {
+            final PdfReportGenerator.PdfResult result = PdfReportGenerator.createReport(context, jsonExpenses, startDate, endDate);
+
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (result.success) {
+                        Toast.makeText(MainActivity.this, "✅ " + result.message, Toast.LENGTH_LONG).show();
+
+                        if (result.uri != null) {
+                            try {
+                                Intent intent = new Intent(Intent.ACTION_VIEW);
+                                intent.setDataAndType(result.uri, "application/pdf");
+                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                Intent chooser = Intent.createChooser(intent, "Open Expense Report PDF");
+                                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                startActivity(chooser);
+                            } catch (Exception viewEx) {
+                                try {
+                                    Intent share = new Intent(Intent.ACTION_SEND);
+                                    share.setType("application/pdf");
+                                    share.putExtra(Intent.EXTRA_STREAM, result.uri);
+                                    share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                    share.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    startActivity(Intent.createChooser(share, "Share Expense Report PDF"));
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                    } else {
+                        Toast.makeText(MainActivity.this, "❌ Failed to generate PDF: " + result.message, Toast.LENGTH_LONG).show();
+                    }
+                }
+            });
+
+            try {
+                JSONObject response = new JSONObject();
+                response.put("success", result.success);
+                response.put("fileName", result.fileName);
+                response.put("message", result.message);
+                return response.toString();
+            } catch (Exception e) {
+                return "{\"success\":" + result.success + "}";
             }
         }
 

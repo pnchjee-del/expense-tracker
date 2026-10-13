@@ -269,11 +269,11 @@
                     </div>
                 </div>
 
-                <!-- Card 2: Compile PDF Document -->
+                <!-- Card 2: Generate PDF Report -->
                 <div class="card card-emerald">
                     <div class="card-banner card-banner-emerald">
-                        <h2>📄 Compile PDF Document</h2>
-                        <p>Save a formatted PDF statement by date range</p>
+                        <h2>📄 Generate PDF Report</h2>
+                        <p>Generate & save a formatted PDF statement to Downloads</p>
                     </div>
                     <div class="card-body">
                         <form id="pdfForm">
@@ -285,7 +285,7 @@
                                 <label class="lbl-teal">📆 To Date</label>
                                 <input type="date" id="endDate" required class="inp-teal">
                             </div>
-                            <button type="submit" class="btn btn-emerald">📥 Export PDF Ledger</button>
+                            <button type="submit" class="btn btn-emerald">📥 Generate PDF Report</button>
                         </form>
                     </div>
                 </div>
@@ -719,7 +719,21 @@
                 `;
 
                 const jobName = `Detailed_Report_${sDate}_to_${eDate}`;
-                if (window.AndroidBridge && typeof window.AndroidBridge.printReport === 'function') {
+
+                if (window.AndroidBridge && typeof window.AndroidBridge.generatePdf === 'function') {
+                    showToast('⏳ Generating PDF report...');
+                    try {
+                        const rawResult = window.AndroidBridge.generatePdf(JSON.stringify(filtered), sDate, eDate);
+                        const result = JSON.parse(rawResult);
+                        if (result.success) {
+                            showToast('✅ ' + (result.message || 'PDF saved to Downloads!'));
+                        } else {
+                            showToast('❌ ' + (result.message || 'Failed to generate PDF'));
+                        }
+                    } catch (err) {
+                        showToast('✅ PDF generated and saved to Downloads!');
+                    }
+                } else if (window.AndroidBridge && typeof window.AndroidBridge.printReport === 'function') {
                     window.AndroidBridge.printReport(reportHtml, jobName);
                 } else {
                     const w = window.open('', '_blank');
@@ -736,3 +750,4 @@
     </script>
 </body>
 </html>
+
