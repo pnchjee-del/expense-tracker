@@ -115,6 +115,7 @@ def spending_summary():
 def generate_report():
     start_str = request.args.get('start_date')
     end_str = request.args.get('end_date')
+    include_itemwise = request.args.get('include_itemwise') in ['true', '1', 'on', 'yes']
 
     if not start_str or not end_str:
         return "Please select a valid start and end date.", 400
@@ -137,6 +138,7 @@ def generate_report():
     # Extended layout table columns to handle math fields
     data = [["Date", "Category", "Item Description", "Qty", "Unit", "Rate", "Total Price"]]
     grand_total = 0.0
+    itemwise_map = {}
 
     for exp in filtered_expenses:
         data.append([
@@ -149,6 +151,13 @@ def generate_report():
             f"{exp.amount:,.2f}"
         ])
         grand_total += exp.amount
+
+        # Item-wise aggregation
+        key = (exp.item_name, exp.category.title(), exp.unit)
+        if key not in itemwise_map:
+            itemwise_map[key] = {'quantity': 0.0, 'amount': 0.0}
+        itemwise_map[key]['quantity'] += exp.quantity
+        itemwise_map[key]['amount'] += exp.amount
 
     data.append(["", "", "", "", "", "Grand Total:", f"{grand_total:,.2f}"])
 
@@ -169,6 +178,41 @@ def generate_report():
     ]))
 
     story.append(table)
+
+    # Optional Item-wise Summary Table if requested
+    if include_itemwise and itemwise_map:
+        story.append(Spacer(1, 20))
+        section_style = ParagraphStyle('SectionHeading', parent=styles['Heading2'], fontSize=13, spaceAfter=8, textColor=colors.HexColor('#1A365D'))
+        story.append(Paragraph("Item-wise Spending Summary", section_style))
+
+        summary_data = [["Item Description", "Category", "Total Qty", "Unit", "Total Spend", "% of Total"]]
+        sorted_items = sorted(itemwise_map.items(), key=lambda x: x[1]['amount'], reverse=True)
+        for (name, cat, unit), vals in sorted_items:
+            pct = (vals['amount'] / grand_total * 100) if grand_total > 0 else 0.0
+            summary_data.append([
+                name,
+                cat,
+                f"{vals['quantity']:g}",
+                unit,
+                f"{vals['amount']:,.2f}",
+                f"{pct:.1f}%"
+            ])
+
+        summary_table = Table(summary_data, colWidths=[140, 95, 60, 45, 85, 55])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F766E')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (1, -1), 'LEFT'),
+            ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#F0FDFA')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCFBF1')),
+        ]))
+        story.append(summary_table)
+
     doc.build(story)
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name=f"Detailed_Report_{start_str}_to_{end_str}.pdf", mimetype='application/pdf')

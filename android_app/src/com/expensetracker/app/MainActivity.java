@@ -105,7 +105,12 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String generatePdf(final String jsonExpenses, final String startDate, final String endDate) {
-            final PdfReportGenerator.PdfResult result = PdfReportGenerator.createReport(context, jsonExpenses, startDate, endDate);
+            return generatePdf(jsonExpenses, startDate, endDate, false);
+        }
+
+        @JavascriptInterface
+        public String generatePdf(final String jsonExpenses, final String startDate, final String endDate, final boolean includeItemwise) {
+            final PdfReportGenerator.PdfResult result = PdfReportGenerator.createReport(context, jsonExpenses, startDate, endDate, includeItemwise);
 
             runOnUiThread(new Runnable() {
                 @Override

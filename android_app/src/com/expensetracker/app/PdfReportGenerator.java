@@ -18,11 +18,13 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class PdfReportGenerator {
 
@@ -50,7 +52,19 @@ public class PdfReportGenerator {
         double amount;
     }
 
+    private static class ItemSummary {
+        String itemName;
+        String category;
+        String unit;
+        double quantity;
+        double amount;
+    }
+
     public static PdfResult createReport(Context context, String jsonExpenses, String startDate, String endDate) {
+        return createReport(context, jsonExpenses, startDate, endDate, false);
+    }
+
+    public static PdfResult createReport(Context context, String jsonExpenses, String startDate, String endDate, boolean includeItemwise) {
         try {
             List<ExpenseItem> items = new ArrayList<>();
             JSONArray arr = new JSONArray(jsonExpenses);
@@ -70,11 +84,40 @@ public class PdfReportGenerator {
                 grandTotal += item.amount;
             }
 
+            // Aggregate item-wise summary if requested
+            List<ItemSummary> summaryList = new ArrayList<>();
+            if (includeItemwise && !items.isEmpty()) {
+                Map<String, ItemSummary> summaryMap = new LinkedHashMap<>();
+                for (ExpenseItem item : items) {
+                    String key = item.itemName.toLowerCase(Locale.ENGLISH).trim() + "||" +
+                                 item.category.toLowerCase(Locale.ENGLISH).trim() + "||" +
+                                 item.unit.trim();
+                    ItemSummary sum = summaryMap.get(key);
+                    if (sum == null) {
+                        sum = new ItemSummary();
+                        sum.itemName = item.itemName;
+                        sum.category = item.category;
+                        sum.unit = item.unit;
+                        sum.quantity = 0.0;
+                        sum.amount = 0.0;
+                        summaryMap.put(key, sum);
+                    }
+                    sum.quantity += item.quantity;
+                    sum.amount += item.amount;
+                }
+                summaryList.addAll(summaryMap.values());
+                Collections.sort(summaryList, new Comparator<ItemSummary>() {
+                    @Override
+                    public int compare(ItemSummary a, ItemSummary b) {
+                        return Double.compare(b.amount, a.amount);
+                    }
+                });
+            }
+
             final int PAGE_WIDTH = 612;   // Letter width in points
             final int PAGE_HEIGHT = 792;  // Letter height in points
             final int LEFT_MARGIN = 36;
             final int RIGHT_MARGIN = 576;
-            final int TABLE_WIDTH = RIGHT_MARGIN - LEFT_MARGIN; // 540
 
             final int ROW_HEIGHT = 22;
             final int HEADER_HEIGHT = 24;
@@ -82,16 +125,38 @@ public class PdfReportGenerator {
             final int TOP_TABLE_START_LATER = 70;
             final int BOTTOM_LIMIT = 730;
 
-            int rowsPerPage1 = (BOTTOM_LIMIT - TOP_TABLE_START_PAGE1 - HEADER_HEIGHT - 35) / ROW_HEIGHT;
-            int rowsPerLaterPage = (BOTTOM_LIMIT - TOP_TABLE_START_LATER - HEADER_HEIGHT - 35) / ROW_HEIGHT;
-            if (rowsPerPage1 <= 0) rowsPerPage1 = 20;
-            if (rowsPerLaterPage <= 0) rowsPerLaterPage = 25;
-
-            int totalPages = 1;
-            if (items.size() > rowsPerPage1) {
-                int rem = items.size() - rowsPerPage1;
-                totalPages = 1 + (int) Math.ceil((double) rem / rowsPerLaterPage);
+            // 1. Simulation pass to calculate totalPages
+            int simPage = 1;
+            int simY = TOP_TABLE_START_PAGE1 + HEADER_HEIGHT;
+            for (int i = 0; i < items.size(); i++) {
+                if (simY + ROW_HEIGHT > BOTTOM_LIMIT) {
+                    simPage++;
+                    simY = TOP_TABLE_START_LATER + HEADER_HEIGHT;
+                }
+                simY += ROW_HEIGHT;
             }
+            if (simY + 24 > BOTTOM_LIMIT) {
+                simPage++;
+                simY = TOP_TABLE_START_LATER;
+            }
+            simY += 24;
+
+            if (includeItemwise && !summaryList.isEmpty()) {
+                simY += 15;
+                if (simY + 24 + HEADER_HEIGHT + ROW_HEIGHT * 2 > BOTTOM_LIMIT) {
+                    simPage++;
+                    simY = TOP_TABLE_START_LATER;
+                }
+                simY += 24 + HEADER_HEIGHT;
+                for (int i = 0; i < summaryList.size(); i++) {
+                    if (simY + ROW_HEIGHT > BOTTOM_LIMIT) {
+                        simPage++;
+                        simY = TOP_TABLE_START_LATER + HEADER_HEIGHT;
+                    }
+                    simY += ROW_HEIGHT;
+                }
+            }
+            final int totalPages = Math.max(1, simPage);
 
             PdfDocument document = new PdfDocument();
 
@@ -105,8 +170,18 @@ public class PdfReportGenerator {
             subtitlePaint.setTextSize(10);
             subtitlePaint.setTypeface(Typeface.DEFAULT);
 
+            Paint sectionHeadingPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            sectionHeadingPaint.setColor(Color.parseColor("#1A365D"));
+            sectionHeadingPaint.setTextSize(13);
+            sectionHeadingPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+
+            // Main table header paint (Blue)
             Paint tableHeaderBgPaint = new Paint();
             tableHeaderBgPaint.setColor(Color.parseColor("#2B6CB0"));
+
+            // Summary table header paint (Teal)
+            Paint summaryHeaderBgPaint = new Paint();
+            summaryHeaderBgPaint.setColor(Color.parseColor("#0F766E"));
 
             Paint tableHeaderTxtPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             tableHeaderTxtPaint.setColor(Color.WHITE);
@@ -119,9 +194,16 @@ public class PdfReportGenerator {
             Paint rowBgOdd = new Paint();
             rowBgOdd.setColor(Color.parseColor("#F7FAFC"));
 
+            Paint summaryRowBgOdd = new Paint();
+            summaryRowBgOdd.setColor(Color.parseColor("#F0FDFA"));
+
             Paint gridLinePaint = new Paint();
             gridLinePaint.setColor(Color.parseColor("#E2E8F0"));
             gridLinePaint.setStrokeWidth(0.5f);
+
+            Paint summaryGridLinePaint = new Paint();
+            summaryGridLinePaint.setColor(Color.parseColor("#CCFBF1"));
+            summaryGridLinePaint.setStrokeWidth(0.5f);
 
             Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             textPaint.setColor(Color.parseColor("#1F2937"));
@@ -138,118 +220,160 @@ public class PdfReportGenerator {
             footerPaint.setTextSize(8);
             footerPaint.setTextAlign(Paint.Align.CENTER);
 
-            int itemIdx = 0;
+            // 2. Render actual pages
+            int curPage = 1;
+            PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, curPage).create();
+            PdfDocument.Page page = document.startPage(pageInfo);
+            Canvas canvas = page.getCanvas();
 
-            for (int pageNum = 1; pageNum <= totalPages; pageNum++) {
-                PdfDocument.PageInfo pageInfo = new PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNum).create();
-                PdfDocument.Page page = document.startPage(pageInfo);
-                Canvas canvas = page.getCanvas();
+            // Page 1 Title
+            canvas.drawText("Detailed Expense Management Report", LEFT_MARGIN, 55, titlePaint);
+            String sub = "Period: " + formatDate(startDate) + " to " + formatDate(endDate);
+            canvas.drawText(sub, LEFT_MARGIN, 75, subtitlePaint);
 
-                int currentY;
+            int currentY = TOP_TABLE_START_PAGE1;
 
-                if (pageNum == 1) {
-                    canvas.drawText("Detailed Expense Management Report", LEFT_MARGIN, 55, titlePaint);
-                    String sub = "Period: " + formatDate(startDate) + " to " + formatDate(endDate);
-                    canvas.drawText(sub, LEFT_MARGIN, 75, subtitlePaint);
-                    currentY = TOP_TABLE_START_PAGE1;
-                } else {
+            // Draw Initial Main Table Header
+            drawMainTableHeader(canvas, currentY, HEADER_HEIGHT, LEFT_MARGIN, RIGHT_MARGIN, tableHeaderBgPaint, tableHeaderTxtPaint);
+            currentY += HEADER_HEIGHT;
+
+            // Render detailed items
+            for (int i = 0; i < items.size(); i++) {
+                if (currentY + ROW_HEIGHT > BOTTOM_LIMIT) {
+                    drawFooter(canvas, curPage, totalPages, PAGE_WIDTH, footerPaint);
+                    document.finishPage(page);
+
+                    curPage++;
+                    pageInfo = new PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, curPage).create();
+                    page = document.startPage(pageInfo);
+                    canvas = page.getCanvas();
+
                     canvas.drawText("Detailed Expense Management Report (Cont.)", LEFT_MARGIN, 45, subtitlePaint);
+                    currentY = TOP_TABLE_START_LATER;
+                    drawMainTableHeader(canvas, currentY, HEADER_HEIGHT, LEFT_MARGIN, RIGHT_MARGIN, tableHeaderBgPaint, tableHeaderTxtPaint);
+                    currentY += HEADER_HEIGHT;
+                }
+
+                ExpenseItem exp = items.get(i);
+                Paint bgPaint = (i % 2 == 0) ? rowBgEven : rowBgOdd;
+                canvas.drawRect(LEFT_MARGIN, currentY, RIGHT_MARGIN, currentY + ROW_HEIGHT, bgPaint);
+
+                float textY = currentY + 14.5f;
+                canvas.drawText(formatDate(exp.date), 42, textY, textPaint);
+                canvas.drawText(capitalize(exp.category), 112, textY, textPaint);
+
+                String itemText = exp.itemName;
+                if (itemText.length() > 24) itemText = itemText.substring(0, 22) + "..";
+                canvas.drawText(itemText, 195, textY, textPaint);
+
+                textPaint.setTextAlign(Paint.Align.RIGHT);
+                String qtyStr = (exp.quantity == (long) exp.quantity) ? String.format(Locale.ENGLISH, "%d", (long) exp.quantity) : String.format(Locale.ENGLISH, "%.2f", exp.quantity);
+                canvas.drawText(qtyStr, 365, textY, textPaint);
+                textPaint.setTextAlign(Paint.Align.LEFT);
+
+                canvas.drawText(exp.unit, 382, textY, textPaint);
+
+                textPaint.setTextAlign(Paint.Align.RIGHT);
+                canvas.drawText(String.format(Locale.ENGLISH, "%,.2f", exp.rate), 475, textY, textPaint);
+                canvas.drawText(String.format(Locale.ENGLISH, "%,.2f", exp.amount), 568, textY, boldPaint);
+                textPaint.setTextAlign(Paint.Align.LEFT);
+
+                canvas.drawLine(LEFT_MARGIN, currentY + ROW_HEIGHT, RIGHT_MARGIN, currentY + ROW_HEIGHT, gridLinePaint);
+                currentY += ROW_HEIGHT;
+            }
+
+            // Draw Grand Total row
+            if (currentY + 24 > BOTTOM_LIMIT) {
+                drawFooter(canvas, curPage, totalPages, PAGE_WIDTH, footerPaint);
+                document.finishPage(page);
+
+                curPage++;
+                pageInfo = new PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, curPage).create();
+                page = document.startPage(pageInfo);
+                canvas = page.getCanvas();
+                currentY = TOP_TABLE_START_LATER;
+            }
+
+            currentY += 4;
+            Paint totalLinePaint = new Paint();
+            totalLinePaint.setColor(Color.parseColor("#1A365D"));
+            totalLinePaint.setStrokeWidth(1.5f);
+            canvas.drawLine(LEFT_MARGIN, currentY, RIGHT_MARGIN, currentY, totalLinePaint);
+
+            currentY += 16;
+            boldPaint.setTextAlign(Paint.Align.RIGHT);
+            canvas.drawText("Grand Total:", 475, currentY, boldPaint);
+            canvas.drawText(String.format(Locale.ENGLISH, "%,.2f", grandTotal), 568, currentY, boldPaint);
+            boldPaint.setTextAlign(Paint.Align.LEFT);
+
+            // Render Item-wise Summary if requested
+            if (includeItemwise && !summaryList.isEmpty()) {
+                currentY += 16;
+                if (currentY + 24 + HEADER_HEIGHT + ROW_HEIGHT * 2 > BOTTOM_LIMIT) {
+                    drawFooter(canvas, curPage, totalPages, PAGE_WIDTH, footerPaint);
+                    document.finishPage(page);
+
+                    curPage++;
+                    pageInfo = new PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, curPage).create();
+                    page = document.startPage(pageInfo);
+                    canvas = page.getCanvas();
                     currentY = TOP_TABLE_START_LATER;
                 }
 
-                // Draw Table Header
-                canvas.drawRect(LEFT_MARGIN, currentY, RIGHT_MARGIN, currentY + HEADER_HEIGHT, tableHeaderBgPaint);
+                canvas.drawText("Item-wise Spending Summary", LEFT_MARGIN, currentY + 16, sectionHeadingPaint);
+                currentY += 24;
 
-                float headerTextY = currentY + 15.5f;
-                canvas.drawText("Date", 42, headerTextY, tableHeaderTxtPaint);
-                canvas.drawText("Category", 112, headerTextY, tableHeaderTxtPaint);
-                canvas.drawText("Item Description", 195, headerTextY, tableHeaderTxtPaint);
-
-                Paint.Align oldAlign = tableHeaderTxtPaint.getTextAlign();
-                tableHeaderTxtPaint.setTextAlign(Paint.Align.RIGHT);
-                canvas.drawText("Qty", 365, headerTextY, tableHeaderTxtPaint);
-                tableHeaderTxtPaint.setTextAlign(oldAlign);
-
-                canvas.drawText("Unit", 382, headerTextY, tableHeaderTxtPaint);
-
-                tableHeaderTxtPaint.setTextAlign(Paint.Align.RIGHT);
-                canvas.drawText("Rate", 475, headerTextY, tableHeaderTxtPaint);
-                canvas.drawText("Total Price", 568, headerTextY, tableHeaderTxtPaint);
-                tableHeaderTxtPaint.setTextAlign(oldAlign);
-
+                drawSummaryTableHeader(canvas, currentY, HEADER_HEIGHT, LEFT_MARGIN, RIGHT_MARGIN, summaryHeaderBgPaint, tableHeaderTxtPaint);
                 currentY += HEADER_HEIGHT;
 
-                int maxRowsThisPage = (pageNum == 1) ? rowsPerPage1 : rowsPerLaterPage;
-                int rowsRendered = 0;
+                for (int i = 0; i < summaryList.size(); i++) {
+                    if (currentY + ROW_HEIGHT > BOTTOM_LIMIT) {
+                        drawFooter(canvas, curPage, totalPages, PAGE_WIDTH, footerPaint);
+                        document.finishPage(page);
 
-                while (itemIdx < items.size() && rowsRendered < maxRowsThisPage) {
-                    ExpenseItem exp = items.get(itemIdx);
+                        curPage++;
+                        pageInfo = new PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, curPage).create();
+                        page = document.startPage(pageInfo);
+                        canvas = page.getCanvas();
 
-                    // Row background
-                    Paint bgPaint = (rowsRendered % 2 == 0) ? rowBgEven : rowBgOdd;
+                        canvas.drawText("Item-wise Spending Summary (Cont.)", LEFT_MARGIN, 45, subtitlePaint);
+                        currentY = TOP_TABLE_START_LATER;
+                        drawSummaryTableHeader(canvas, currentY, HEADER_HEIGHT, LEFT_MARGIN, RIGHT_MARGIN, summaryHeaderBgPaint, tableHeaderTxtPaint);
+                        currentY += HEADER_HEIGHT;
+                    }
+
+                    ItemSummary sumItem = summaryList.get(i);
+                    Paint bgPaint = (i % 2 == 0) ? rowBgEven : summaryRowBgOdd;
                     canvas.drawRect(LEFT_MARGIN, currentY, RIGHT_MARGIN, currentY + ROW_HEIGHT, bgPaint);
 
                     float textY = currentY + 14.5f;
-
-                    // Date
-                    canvas.drawText(formatDate(exp.date), 42, textY, textPaint);
-
-                    // Category (capitalized)
-                    String catCap = capitalize(exp.category);
-                    canvas.drawText(catCap, 112, textY, textPaint);
-
-                    // Item Name (truncated if too long)
-                    String itemText = exp.itemName;
+                    String itemText = sumItem.itemName;
                     if (itemText.length() > 24) itemText = itemText.substring(0, 22) + "..";
-                    canvas.drawText(itemText, 195, textY, textPaint);
+                    canvas.drawText(itemText, 42, textY, textPaint);
+                    canvas.drawText(capitalize(sumItem.category), 215, textY, textPaint);
 
-                    // Qty (Right aligned)
                     textPaint.setTextAlign(Paint.Align.RIGHT);
-                    String qtyStr = (exp.quantity == (long) exp.quantity) ? String.format(Locale.ENGLISH, "%d", (long) exp.quantity) : String.format(Locale.ENGLISH, "%.2f", exp.quantity);
+                    String qtyStr = (sumItem.quantity == (long) sumItem.quantity) ? String.format(Locale.ENGLISH, "%d", (long) sumItem.quantity) : String.format(Locale.ENGLISH, "%.2f", sumItem.quantity);
                     canvas.drawText(qtyStr, 365, textY, textPaint);
                     textPaint.setTextAlign(Paint.Align.LEFT);
 
-                    // Unit
-                    canvas.drawText(exp.unit, 382, textY, textPaint);
+                    canvas.drawText(sumItem.unit, 382, textY, textPaint);
 
-                    // Rate (Right aligned)
                     textPaint.setTextAlign(Paint.Align.RIGHT);
-                    canvas.drawText(String.format(Locale.ENGLISH, "%,.2f", exp.rate), 475, textY, textPaint);
+                    canvas.drawText(String.format(Locale.ENGLISH, "%,.2f", sumItem.amount), 485, textY, boldPaint);
 
-                    // Total (Right aligned)
-                    canvas.drawText(String.format(Locale.ENGLISH, "%,.2f", exp.amount), 568, textY, boldPaint);
+                    double pct = (grandTotal > 0) ? (sumItem.amount / grandTotal * 100.0) : 0.0;
+                    canvas.drawText(String.format(Locale.ENGLISH, "%.1f%%", pct), 568, textY, textPaint);
                     textPaint.setTextAlign(Paint.Align.LEFT);
 
-                    // Bottom grid line
-                    canvas.drawLine(LEFT_MARGIN, currentY + ROW_HEIGHT, RIGHT_MARGIN, currentY + ROW_HEIGHT, gridLinePaint);
-
+                    canvas.drawLine(LEFT_MARGIN, currentY + ROW_HEIGHT, RIGHT_MARGIN, currentY + ROW_HEIGHT, summaryGridLinePaint);
                     currentY += ROW_HEIGHT;
-                    itemIdx++;
-                    rowsRendered++;
                 }
-
-                // If on final page, draw Grand Total row
-                if (pageNum == totalPages) {
-                    currentY += 4;
-                    // Top bold line
-                    Paint totalLinePaint = new Paint();
-                    totalLinePaint.setColor(Color.parseColor("#1A365D"));
-                    totalLinePaint.setStrokeWidth(1.5f);
-                    canvas.drawLine(LEFT_MARGIN, currentY, RIGHT_MARGIN, currentY, totalLinePaint);
-
-                    currentY += 16;
-                    boldPaint.setTextAlign(Paint.Align.RIGHT);
-                    canvas.drawText("Grand Total:", 475, currentY, boldPaint);
-                    canvas.drawText(String.format(Locale.ENGLISH, "%,.2f", grandTotal), 568, currentY, boldPaint);
-                    boldPaint.setTextAlign(Paint.Align.LEFT);
-                }
-
-                // Footer
-                String footerText = "Expense Control Center   •   Page " + pageNum + " of " + totalPages;
-                canvas.drawText(footerText, PAGE_WIDTH / 2f, 765, footerPaint);
-
-                document.finishPage(page);
             }
+
+            // Finish the last page
+            drawFooter(canvas, curPage, totalPages, PAGE_WIDTH, footerPaint);
+            document.finishPage(page);
 
             String fileName = "Detailed_Report_" + startDate + "_to_" + endDate + ".pdf";
             Uri resultUri = null;
@@ -285,11 +409,10 @@ public class PdfReportGenerator {
             }
 
             // 2. Secondary: Also save into app's Downloads folder or external files dir
-            File localFile = null;
             try {
                 File dir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
                 if (dir == null) dir = context.getFilesDir();
-                localFile = new File(dir, fileName);
+                File localFile = new File(dir, fileName);
                 FileOutputStream fos = new FileOutputStream(localFile);
                 document.writeTo(fos);
                 fos.flush();
@@ -313,6 +436,50 @@ public class PdfReportGenerator {
         }
     }
 
+    private static void drawMainTableHeader(Canvas canvas, int currentY, int height, int left, int right, Paint bgPaint, Paint txtPaint) {
+        canvas.drawRect(left, currentY, right, currentY + height, bgPaint);
+        float headerTextY = currentY + 15.5f;
+        canvas.drawText("Date", 42, headerTextY, txtPaint);
+        canvas.drawText("Category", 112, headerTextY, txtPaint);
+        canvas.drawText("Item Description", 195, headerTextY, txtPaint);
+
+        Paint.Align oldAlign = txtPaint.getTextAlign();
+        txtPaint.setTextAlign(Paint.Align.RIGHT);
+        canvas.drawText("Qty", 365, headerTextY, txtPaint);
+        txtPaint.setTextAlign(oldAlign);
+
+        canvas.drawText("Unit", 382, headerTextY, txtPaint);
+
+        txtPaint.setTextAlign(Paint.Align.RIGHT);
+        canvas.drawText("Rate", 475, headerTextY, txtPaint);
+        canvas.drawText("Total Price", 568, headerTextY, txtPaint);
+        txtPaint.setTextAlign(oldAlign);
+    }
+
+    private static void drawSummaryTableHeader(Canvas canvas, int currentY, int height, int left, int right, Paint bgPaint, Paint txtPaint) {
+        canvas.drawRect(left, currentY, right, currentY + height, bgPaint);
+        float headerTextY = currentY + 15.5f;
+        canvas.drawText("Item Description", 42, headerTextY, txtPaint);
+        canvas.drawText("Category", 215, headerTextY, txtPaint);
+
+        Paint.Align oldAlign = txtPaint.getTextAlign();
+        txtPaint.setTextAlign(Paint.Align.RIGHT);
+        canvas.drawText("Total Qty", 365, headerTextY, txtPaint);
+        txtPaint.setTextAlign(oldAlign);
+
+        canvas.drawText("Unit", 382, headerTextY, txtPaint);
+
+        txtPaint.setTextAlign(Paint.Align.RIGHT);
+        canvas.drawText("Total Spend", 485, headerTextY, txtPaint);
+        canvas.drawText("% Total", 568, headerTextY, txtPaint);
+        txtPaint.setTextAlign(oldAlign);
+    }
+
+    private static void drawFooter(Canvas canvas, int pageNum, int totalPages, int pageWidth, Paint footerPaint) {
+        String footerText = "Expense Control Center   •   Page " + pageNum + " of " + totalPages;
+        canvas.drawText(footerText, pageWidth / 2f, 765, footerPaint);
+    }
+
     private static String formatDate(String ymd) {
         if (ymd == null || ymd.length() != 10) return ymd;
         String[] parts = ymd.split("-");
@@ -334,4 +501,3 @@ public class PdfReportGenerator {
         return sb.toString().trim();
     }
 }
-

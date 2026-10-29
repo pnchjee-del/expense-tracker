@@ -286,6 +286,12 @@
                                 <label class="lbl-teal">📆 To Date</label>
                                 <input type="date" id="endDate" required class="inp-teal">
                             </div>
+                            <div class="field" style="display:flex;align-items:center;gap:8px;margin-top:6px;margin-bottom:14px;">
+                                <input type="checkbox" id="includeItemwise" style="width:18px;height:18px;accent-color:#059669;cursor:pointer;">
+                                <label for="includeItemwise" style="font-size:12px;font-weight:700;color:#065F46;cursor:pointer;margin-bottom:0;text-transform:none;">
+                                    📊 Include Item-wise Spending Summary
+                                </label>
+                            </div>
                             <button type="submit" class="btn btn-emerald">📥 Generate PDF Report</button>
                         </form>
                     </div>
@@ -656,6 +662,8 @@
                 const eDate = document.getElementById('endDate').value;
                 if (!sDate || !eDate) return;
 
+                const includeItemwise = document.getElementById('includeItemwise') ? document.getElementById('includeItemwise').checked : false;
+
                 const filtered = state.expenses
                     .filter(x => x.date >= sDate && x.date <= eDate)
                     .sort((a, b) => a.date.localeCompare(b.date));
@@ -676,6 +684,49 @@
                     `;
                 }).join('');
 
+                let itemwiseHtml = '';
+                if (includeItemwise && filtered.length > 0) {
+                    const itemMap = {};
+                    filtered.forEach(exp => {
+                        const k = exp.item_name.toLowerCase().trim() + '||' + exp.category.toLowerCase().trim() + '||' + exp.unit.trim();
+                        if (!itemMap[k]) itemMap[k] = { name: exp.item_name, cat: exp.category, unit: exp.unit, qty: 0, amt: 0 };
+                        itemMap[k].qty += Number(exp.quantity || 0);
+                        itemMap[k].amt += Number(exp.amount || 0);
+                    });
+                    const sortedItems = Object.values(itemMap).sort((a, b) => b.amt - a.amt);
+                    const sumRows = sortedItems.map(item => {
+                        const pct = grandTotal > 0 ? (item.amt / grandTotal * 100).toFixed(1) : '0.0';
+                        return `
+                            <tr>
+                                <td>${item.name}</td>
+                                <td>${item.cat.replace(/\b\w/g, c => c.toUpperCase())}</td>
+                                <td style="text-align:right">${item.qty}</td>
+                                <td style="text-align:right">${item.unit}</td>
+                                <td style="text-align:right">${formatINR(item.amt)}</td>
+                                <td style="text-align:right">${pct}%</td>
+                            </tr>
+                        `;
+                    }).join('');
+                    itemwiseHtml = `
+                        <h2 style="color:#1A365D;font-size:16px;margin-top:24px;margin-bottom:8px;">Item-wise Spending Summary</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="background:#0F766E">Item Description</th>
+                                    <th style="background:#0F766E">Category</th>
+                                    <th style="background:#0F766E;text-align:right">Total Qty</th>
+                                    <th style="background:#0F766E;text-align:right">Unit</th>
+                                    <th style="background:#0F766E;text-align:right">Total Spend</th>
+                                    <th style="background:#0F766E;text-align:right">% of Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${sumRows}
+                            </tbody>
+                        </table>
+                    `;
+                }
+
                 const reportHtml = `
                     <!DOCTYPE html>
                     <html>
@@ -685,7 +736,7 @@
                             body { font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #1A202C; }
                             h1 { color: #1A365D; font-size: 22px; margin-bottom: 6px; }
                             p { color: #4A5568; font-size: 12px; margin-bottom: 18px; }
-                            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                            table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 16px; }
                             th { background: #2B6CB0; color: #FFFFFF; padding: 8px; text-align: left; }
                             td { padding: 7px 8px; border-bottom: 1px solid #E2E8F0; background: #F7FAFC; }
                             .total-row td { background: #FFFFFF; font-weight: bold; border-top: 2px solid #1A365D; }
@@ -715,6 +766,7 @@
                                 </tr>
                             </tbody>
                         </table>
+                        ${itemwiseHtml}
                     </body>
                     </html>
                 `;
@@ -724,7 +776,7 @@
                 if (window.AndroidBridge && typeof window.AndroidBridge.generatePdf === 'function') {
                     showToast('⏳ Generating PDF report...');
                     try {
-                        const rawResult = window.AndroidBridge.generatePdf(JSON.stringify(filtered), sDate, eDate);
+                        const rawResult = window.AndroidBridge.generatePdf(JSON.stringify(filtered), sDate, eDate, includeItemwise);
                         const result = JSON.parse(rawResult);
                         if (result.success) {
                             showToast('✅ ' + (result.message || 'PDF saved to Downloads!'));
@@ -751,4 +803,3 @@
     </script>
 </body>
 </html>
-
