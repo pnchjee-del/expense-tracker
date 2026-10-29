@@ -237,6 +237,17 @@ def download_apk():
         mimetype='application/vnd.android.package-archive'
     )
 
+@app.route('/update.apk', methods=['GET'])
+@app.route('/download_update_apk', methods=['GET'])
+def download_update_apk():
+    apk_path = 'static/update.apk' if os.path.exists('static/update.apk') else 'static/ExpenseTracker.apk'
+    return send_file(
+        apk_path,
+        as_attachment=True,
+        download_name='update.apk',
+        mimetype='application/vnd.android.package-archive'
+    )
+
 with app.app_context():
     db.create_all()
 
