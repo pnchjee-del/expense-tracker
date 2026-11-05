@@ -303,7 +303,7 @@
                                     📊 Include Item-wise Spending Summary
                                 </label>
                             </div>
-                            <button type="submit" class="btn btn-emerald">📥 Generate PDF Report</button>
+                            <button type="submit" class="btn btn-emerald">📄 Open Report in Separate Window</button>
                         </form>
                     </div>
                 </div>
@@ -333,7 +333,7 @@
                             </div>
                             <div style="display:flex;gap:8px;margin-top:6px;">
                                 <button type="submit" class="btn btn-cyan" style="flex:1;">🔎 Find Usage</button>
-                                <button type="button" id="exportItemPdfBtn" class="btn btn-indigo" style="flex:1;">📄 Export PDF</button>
+                                <button type="button" id="exportItemPdfBtn" class="btn btn-indigo" style="flex:1;">📄 Open Item Report</button>
                             </div>
                         </form>
 
@@ -422,6 +422,30 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Separate Report Viewer Window (Modal Overlay) -->
+    <div id="reportViewerModal" style="display:none;position:fixed;inset:0;background:#F8FAFC;z-index:9999;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+        <!-- Sticky Top Bar -->
+        <div style="position:sticky;top:0;left:0;right:0;background:#0F172A;color:#FFFFFF;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 4px 14px rgba(0,0,0,0.2);z-index:100;">
+            <button id="closeReportViewerBtn" type="button" style="background:#334155;color:#FFFFFF;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
+                ⬅️ Close
+            </button>
+            <span id="reportViewerTopTitle" style="font-size:13px;font-weight:800;color:#F8FAFC;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Report Viewer</span>
+            <div style="display:flex;gap:6px;">
+                <button id="saveReportPdfBtn" type="button" style="background:linear-gradient(90deg, #059669, #0D9488);color:#FFFFFF;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:4px;box-shadow:0 2px 6px rgba(5,150,105,0.4);">
+                    <span>💾</span> <span>Save as PDF</span>
+                </button>
+                <button id="printReportBtn" type="button" style="background:#475569;color:#FFFFFF;border:none;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
+                    🖨️
+                </button>
+            </div>
+        </div>
+
+        <!-- Printable Report Paper Sheet Container -->
+        <div style="max-width:800px;margin:16px auto 32px;background:#FFFFFF;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,0.06);padding:20px;border:1px solid #E2E8F0;">
+            <div id="reportViewerBody"></div>
         </div>
     </div>
 
@@ -742,6 +766,58 @@
                 showToast('✨ Expense saved!');
             });
 
+            // Report Viewer Modal Management
+            const reportViewerModal = document.getElementById('reportViewerModal');
+            const reportViewerBody = document.getElementById('reportViewerBody');
+            const reportViewerTopTitle = document.getElementById('reportViewerTopTitle');
+            const closeReportViewerBtn = document.getElementById('closeReportViewerBtn');
+            const saveReportPdfBtn = document.getElementById('saveReportPdfBtn');
+            const printReportBtn = document.getElementById('printReportBtn');
+
+            let onActiveSavePdf = null;
+            let onActivePrint = null;
+
+            function openReportViewer(title, bodyHtml, savePdfCallback, printCallback) {
+                reportViewerTopTitle.textContent = title;
+                reportViewerBody.innerHTML = bodyHtml;
+                onActiveSavePdf = savePdfCallback;
+                onActivePrint = printCallback;
+                reportViewerModal.style.display = 'block';
+                reportViewerModal.scrollTop = 0;
+            }
+
+            function closeReportViewer() {
+                if (reportViewerModal && reportViewerModal.style.display === 'block') {
+                    reportViewerModal.style.display = 'none';
+                    reportViewerBody.innerHTML = '';
+                    onActiveSavePdf = null;
+                    onActivePrint = null;
+                    return true;
+                }
+                return false;
+            }
+            window.closeReportViewer = closeReportViewer;
+
+            if (closeReportViewerBtn) {
+                closeReportViewerBtn.addEventListener('click', closeReportViewer);
+            }
+
+            if (saveReportPdfBtn) {
+                saveReportPdfBtn.addEventListener('click', () => {
+                    if (typeof onActiveSavePdf === 'function') {
+                        onActiveSavePdf();
+                    }
+                });
+            }
+
+            if (printReportBtn) {
+                printReportBtn.addEventListener('click', () => {
+                    if (typeof onActivePrint === 'function') {
+                        onActivePrint();
+                    }
+                });
+            }
+
             document.getElementById('pdfForm').addEventListener('submit', (e) => {
                 e.preventDefault();
                 const sDate = document.getElementById('startDate').value;
@@ -759,13 +835,13 @@
                     grandTotal += Number(exp.amount || 0);
                     return `
                         <tr>
-                            <td>${formatDateDMY(exp.date)}</td>
-                            <td>${exp.category.replace(/\b\w/g, c => c.toUpperCase())}</td>
-                            <td>${exp.item_name}</td>
-                            <td style="text-align:right">${exp.quantity}</td>
-                            <td style="text-align:right">${exp.unit}</td>
-                            <td style="text-align:right">${formatINR(exp.rate)}</td>
-                            <td style="text-align:right">${formatINR(exp.amount)}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;white-space:nowrap;">${formatDateDMY(exp.date)}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;white-space:nowrap;">${exp.category.replace(/\b\w/g, c => c.toUpperCase())}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;font-weight:600;">${exp.item_name}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;text-align:right;">${exp.quantity}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;text-align:right;">${exp.unit}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;text-align:right;">₹ ${formatINR(exp.rate)}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;text-align:right;font-weight:700;">₹ ${formatINR(exp.amount)}</td>
                         </tr>
                     `;
                 }).join('');
@@ -784,104 +860,104 @@
                         const pct = grandTotal > 0 ? (item.amt / grandTotal * 100).toFixed(1) : '0.0';
                         return `
                             <tr>
-                                <td>${item.name}</td>
-                                <td>${item.cat.replace(/\b\w/g, c => c.toUpperCase())}</td>
-                                <td style="text-align:right">${item.qty}</td>
-                                <td style="text-align:right">${item.unit}</td>
-                                <td style="text-align:right">${formatINR(item.amt)}</td>
-                                <td style="text-align:right">${pct}%</td>
+                                <td style="padding:7px 8px;border-bottom:1px solid #CCFBF1;font-weight:600;">${item.name}</td>
+                                <td style="padding:7px 8px;border-bottom:1px solid #CCFBF1;">${item.cat.replace(/\b\w/g, c => c.toUpperCase())}</td>
+                                <td style="padding:7px 8px;border-bottom:1px solid #CCFBF1;text-align:right;">${item.qty}</td>
+                                <td style="padding:7px 8px;border-bottom:1px solid #CCFBF1;text-align:right;">${item.unit}</td>
+                                <td style="padding:7px 8px;border-bottom:1px solid #CCFBF1;text-align:right;font-weight:700;color:#0F766E;">₹ ${formatINR(item.amt)}</td>
+                                <td style="padding:7px 8px;border-bottom:1px solid #CCFBF1;text-align:right;">${pct}%</td>
                             </tr>
                         `;
                     }).join('');
                     itemwiseHtml = `
-                        <h2 style="color:#1A365D;font-size:16px;margin-top:24px;margin-bottom:8px;">Item-wise Spending Summary</h2>
-                        <table>
+                        <h3 style="color:#0F766E;font-size:15px;margin-top:24px;margin-bottom:8px;font-weight:700;">Item-wise Spending Summary</h3>
+                        <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:16px;">
                             <thead>
                                 <tr>
-                                    <th style="background:#0F766E">Item Description</th>
-                                    <th style="background:#0F766E">Category</th>
-                                    <th style="background:#0F766E;text-align:right">Total Qty</th>
-                                    <th style="background:#0F766E;text-align:right">Unit</th>
-                                    <th style="background:#0F766E;text-align:right">Total Spend</th>
-                                    <th style="background:#0F766E;text-align:right">% of Total</th>
+                                    <th style="background:#0F766E;color:#FFFFFF;padding:8px;text-align:left;">Item Description</th>
+                                    <th style="background:#0F766E;color:#FFFFFF;padding:8px;text-align:left;">Category</th>
+                                    <th style="background:#0F766E;color:#FFFFFF;padding:8px;text-align:right;">Total Qty</th>
+                                    <th style="background:#0F766E;color:#FFFFFF;padding:8px;text-align:right;">Unit</th>
+                                    <th style="background:#0F766E;color:#FFFFFF;padding:8px;text-align:right;">Total Spend</th>
+                                    <th style="background:#0F766E;color:#FFFFFF;padding:8px;text-align:right;">% of Total</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody style="background:#F0FDFA;">
                                 ${sumRows}
                             </tbody>
                         </table>
                     `;
                 }
 
-                const reportHtml = `
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset="UTF-8">
-                        <style>
-                            body { font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #1A202C; }
-                            h1 { color: #1A365D; font-size: 22px; margin-bottom: 6px; }
-                            p { color: #4A5568; font-size: 12px; margin-bottom: 18px; }
-                            table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 16px; }
-                            th { background: #2B6CB0; color: #FFFFFF; padding: 8px; text-align: left; }
-                            td { padding: 7px 8px; border-bottom: 1px solid #E2E8F0; background: #F7FAFC; }
-                            .total-row td { background: #FFFFFF; font-weight: bold; border-top: 2px solid #1A365D; }
-                        </style>
-                    </head>
-                    <body>
-                        <h1>Detailed Expense Management Report</h1>
-                        <p>Period: ${formatDateDMY(sDate)} to ${formatDateDMY(eDate)}</p>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Category</th>
-                                    <th>Item Description</th>
-                                    <th style="text-align:right">Qty</th>
-                                    <th style="text-align:right">Unit</th>
-                                    <th style="text-align:right">Rate</th>
-                                    <th style="text-align:right">Total Price</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rowsHtml || '<tr><td colspan="7" style="text-align:center">No records in selected period</td></tr>'}
-                                <tr class="total-row">
-                                    <td colspan="5"></td>
-                                    <td style="text-align:right">Grand Total:</td>
-                                    <td style="text-align:right">₹ ${formatINR(grandTotal)}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        ${itemwiseHtml}
-                    </body>
-                    </html>
+                const sheetHtml = `
+                    <div style="border-bottom:1px solid #E2E8F0;padding-bottom:14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+                        <div>
+                            <h2 style="font-size:20px;font-weight:800;color:#1E293B;">Detailed Expense Management Report</h2>
+                            <p style="font-size:12px;color:#64748B;margin-top:2px;">Period: <strong>${formatDateDMY(sDate)}</strong> to <strong>${formatDateDMY(eDate)}</strong></p>
+                        </div>
+                        <div style="background:#EEF2FF;border:1px solid #C7D2FE;padding:8px 16px;border-radius:10px;text-align:right;">
+                            <span style="font-size:10px;font-weight:700;color:#4338CA;text-transform:uppercase;">Grand Total</span>
+                            <div style="font-size:18px;font-weight:900;color:#312E81;">₹ ${formatINR(grandTotal)}</div>
+                        </div>
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:16px;">
+                        <thead>
+                            <tr>
+                                <th style="background:#2B6CB0;color:#FFFFFF;padding:8px;text-align:left;">Date</th>
+                                <th style="background:#2B6CB0;color:#FFFFFF;padding:8px;text-align:left;">Category</th>
+                                <th style="background:#2B6CB0;color:#FFFFFF;padding:8px;text-align:left;">Item Description</th>
+                                <th style="background:#2B6CB0;color:#FFFFFF;padding:8px;text-align:right;">Qty</th>
+                                <th style="background:#2B6CB0;color:#FFFFFF;padding:8px;text-align:right;">Unit</th>
+                                <th style="background:#2B6CB0;color:#FFFFFF;padding:8px;text-align:right;">Rate</th>
+                                <th style="background:#2B6CB0;color:#FFFFFF;padding:8px;text-align:right;">Total Price</th>
+                            </tr>
+                        </thead>
+                        <tbody style="background:#F8FAFC;">
+                            ${rowsHtml || '<tr><td colspan="7" style="text-align:center;padding:16px;color:#94A3B8;">No records in selected period</td></tr>'}
+                            <tr style="background:#FFFFFF;font-weight:bold;border-top:2px solid:#1A365D;">
+                                <td colspan="5" style="padding:8px;"></td>
+                                <td style="padding:8px;text-align:right;font-weight:bold;">Grand Total:</td>
+                                <td style="padding:8px;text-align:right;font-weight:bold;color:#1E3A8A;">₹ ${formatINR(grandTotal)}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    ${itemwiseHtml}
+                    <div style="margin-top:20px;padding-top:12px;border-top:1px solid #E2E8F0;font-size:11px;color:#94A3B8;text-align:center;">
+                        To save this report to your device, tap <strong>Save as PDF</strong> in the top bar.
+                    </div>
                 `;
 
                 const jobName = `Detailed_Report_${sDate}_to_${eDate}`;
 
-                if (window.AndroidBridge && typeof window.AndroidBridge.generatePdf === 'function') {
-                    showToast('⏳ Generating PDF report...');
-                    try {
-                        const rawResult = window.AndroidBridge.generatePdf(JSON.stringify(filtered), sDate, eDate, includeItemwise);
-                        const result = JSON.parse(rawResult);
-                        if (result.success) {
-                            showToast('✅ ' + (result.message || 'PDF saved to Downloads!'));
-                        } else {
-                            showToast('❌ ' + (result.message || 'Failed to generate PDF'));
+                const savePdfAction = () => {
+                    if (window.AndroidBridge && typeof window.AndroidBridge.generatePdf === 'function') {
+                        showToast('⏳ Saving PDF report to Downloads...');
+                        try {
+                            const rawResult = window.AndroidBridge.generatePdf(JSON.stringify(filtered), sDate, eDate, includeItemwise);
+                            const result = JSON.parse(rawResult);
+                            if (result.success) {
+                                showToast('✅ ' + (result.message || 'PDF saved to Downloads!'));
+                            } else {
+                                showToast('❌ ' + (result.message || 'Failed to generate PDF'));
+                            }
+                        } catch (err) {
+                            showToast('✅ PDF saved to Downloads folder!');
                         }
-                    } catch (err) {
-                        showToast('✅ PDF generated and saved to Downloads!');
+                    } else {
+                        showToast('ℹ️ Save as PDF: Please use the Print option to save as PDF.');
                     }
-                } else if (window.AndroidBridge && typeof window.AndroidBridge.printReport === 'function') {
-                    window.AndroidBridge.printReport(reportHtml, jobName);
-                } else {
-                    const w = window.open('', '_blank');
-                    if (w) {
-                        w.document.write(reportHtml);
-                        w.document.close();
-                        w.print();
+                };
+
+                const printAction = () => {
+                    if (window.AndroidBridge && typeof window.AndroidBridge.printReport === 'function') {
+                        window.AndroidBridge.printReport(sheetHtml, jobName);
+                    } else {
+                        window.print();
                     }
-                }
+                };
+
+                // Open in separate window (modal viewer)
+                openReportViewer(`Report: ${formatDateDMY(sDate)} to ${formatDateDMY(eDate)}`, sheetHtml, savePdfAction, printAction);
             });
 
             // Single Item Usage Finder Logic
@@ -1014,86 +1090,127 @@
 
                     const matched = getFilteredItemExpenses(targetItem, sDate, eDate);
 
-                    if (window.AndroidBridge && typeof window.AndroidBridge.generateItemReport === 'function') {
-                        showToast('⏳ Generating Item Usage PDF...');
-                        try {
-                            const rawResult = window.AndroidBridge.generateItemReport(JSON.stringify(state.expenses), targetItem, sDate, eDate);
-                            const result = JSON.parse(rawResult);
-                            if (result.success) {
-                                showToast('✅ ' + (result.message || 'PDF saved to Downloads!'));
-                            } else {
-                                showToast('❌ ' + (result.message || 'Failed to generate PDF'));
-                            }
-                        } catch (err) {
-                            showToast('✅ PDF generated and saved to Downloads!');
-                        }
-                    } else {
-                        // Fallback print
-                        let grandTotal = 0;
-                        const rows = matched.map(exp => {
-                            grandTotal += Number(exp.amount || 0);
-                            return `
-                                <tr>
-                                    <td>${formatDateDMY(exp.date)}</td>
-                                    <td>${exp.category.replace(/\b\w/g, c => c.toUpperCase())}</td>
-                                    <td>${exp.item_name}</td>
-                                    <td style="text-align:right">${exp.quantity}</td>
-                                    <td style="text-align:right">${exp.unit}</td>
-                                    <td style="text-align:right">${formatINR(exp.rate)}</td>
-                                    <td style="text-align:right">${formatINR(exp.amount)}</td>
-                                </tr>
-                            `;
-                        }).join('');
+                    let totalSpend = 0;
+                    const unitMap = {};
+                    matched.forEach(exp => {
+                        totalSpend += Number(exp.amount || 0);
+                        const u = exp.unit || 'Pcs';
+                        unitMap[u] = (unitMap[u] || 0) + Number(exp.quantity || 0);
+                    });
 
-                        const reportHtml = `
-                            <!DOCTYPE html>
-                            <html>
-                            <head>
-                                <meta charset="UTF-8">
-                                <style>
-                                    body { font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #1A202C; }
-                                    h1 { color: #1A365D; font-size: 20px; margin-bottom: 4px; }
-                                    p { color: #4A5568; font-size: 12px; margin-bottom: 16px; }
-                                    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-                                    th { background: #0284C7; color: #FFFFFF; padding: 8px; text-align: left; }
-                                    td { padding: 7px 8px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; }
-                                    .total-row td { background: #FFFFFF; font-weight: bold; border-top: 2px solid #0284C7; }
-                                </style>
-                            </head>
-                            <body>
-                                <h1>Item Usage Statement: ${targetItem}</h1>
-                                <p>Period: ${formatDateDMY(sDate)} to ${formatDateDMY(eDate)}</p>
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Category</th>
-                                            <th>Item Description</th>
-                                            <th style="text-align:right">Qty</th>
-                                            <th style="text-align:right">Unit</th>
-                                            <th style="text-align:right">Rate</th>
-                                            <th style="text-align:right">Total</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${rows || '<tr><td colspan="7" style="text-align:center">No purchase records found in selected period</td></tr>'}
-                                        <tr class="total-row">
-                                            <td colspan="5"></td>
-                                            <td style="text-align:right">Total Spend:</td>
-                                            <td style="text-align:right">₹ ${formatINR(grandTotal)}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </body>
-                            </html>
-                        `;
-                        const w = window.open('', '_blank');
-                        if (w) {
-                            w.document.write(reportHtml);
-                            w.document.close();
-                            w.print();
-                        }
+                    const unitKeys = Object.keys(unitMap);
+                    let qtyStr = unitKeys.map(u => `${unitMap[u]} ${u}`).join(', ');
+                    if (!qtyStr) qtyStr = '0';
+
+                    let avgRateStr = '₹ 0.00';
+                    if (unitKeys.length === 1) {
+                        const u = unitKeys[0];
+                        const q = unitMap[u];
+                        if (q > 0) avgRateStr = `₹ ${formatINR(totalSpend / q)} / ${u}`;
+                    } else if (matched.length > 0) {
+                        const sumRate = matched.reduce((acc, x) => acc + Number(x.rate || 0), 0);
+                        avgRateStr = `₹ ${formatINR(sumRate / matched.length)} (avg)`;
                     }
+
+                    const rows = matched.map(exp => `
+                        <tr>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;white-space:nowrap;">${formatDateDMY(exp.date)}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;white-space:nowrap;">${exp.category.replace(/\b\w/g, c => c.toUpperCase())}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;font-weight:600;">${exp.item_name}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;text-align:right;">${exp.quantity}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;text-align:right;">${exp.unit}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;text-align:right;">₹ ${formatINR(exp.rate)}</td>
+                            <td style="padding:7px 8px;border-bottom:1px solid #E2E8F0;text-align:right;font-weight:700;">₹ ${formatINR(exp.amount)}</td>
+                        </tr>
+                    `).join('');
+
+                    const sheetHtml = `
+                        <div style="border-bottom:1px solid #E2E8F0;padding-bottom:14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+                            <div>
+                                <span style="font-size:11px;font-weight:700;color:#0284C7;text-transform:uppercase;">Single Item Usage Statement</span>
+                                <h2 style="font-size:20px;font-weight:800;color:#0F172A;margin-top:2px;">${targetItem.replace(/\b\w/g, c => c.toUpperCase())}</h2>
+                                <p style="font-size:12px;color:#64748B;margin-top:2px;">Period: <strong>${formatDateDMY(sDate)}</strong> to <strong>${formatDateDMY(eDate)}</strong></p>
+                            </div>
+                            <div style="background:#F0F9FF;border:1px solid #BAE6FD;padding:8px 16px;border-radius:10px;text-align:right;">
+                                <span style="font-size:10px;font-weight:700;color:#0369A1;text-transform:uppercase;">Total Spend</span>
+                                <div style="font-size:18px;font-weight:900;color:#0C4A6E;">₹ ${formatINR(totalSpend)}</div>
+                            </div>
+                        </div>
+
+                        <!-- 4 KPI Blocks -->
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+                            <div style="background:#F0F9FF;border:1px solid #BAE6FD;padding:8px 10px;border-radius:8px;text-align:center;">
+                                <span style="font-size:10px;font-weight:700;color:#0369A1;text-transform:uppercase;">Total Quantity</span>
+                                <div style="font-size:14px;font-weight:800;color:#0C4A6E;margin-top:2px;">${qtyStr}</div>
+                            </div>
+                            <div style="background:#ECFDF5;border:1px solid #A7F3D0;padding:8px 10px;border-radius:8px;text-align:center;">
+                                <span style="font-size:10px;font-weight:700;color:#047857;text-transform:uppercase;">Total Spend</span>
+                                <div style="font-size:14px;font-weight:800;color:#065F46;margin-top:2px;">₹ ${formatINR(totalSpend)}</div>
+                            </div>
+                            <div style="background:#FAF5FF;border:1px solid #E9D5FF;padding:8px 10px;border-radius:8px;text-align:center;">
+                                <span style="font-size:10px;font-weight:700;color:#7E22CE;text-transform:uppercase;">Purchases</span>
+                                <div style="font-size:14px;font-weight:800;color:#581C87;margin-top:2px;">${matched.length} times</div>
+                            </div>
+                            <div style="background:#FFFBEB;border:1px solid #FDE68A;padding:8px 10px;border-radius:8px;text-align:center;">
+                                <span style="font-size:10px;font-weight:700;color:#B45309;text-transform:uppercase;">Avg Rate</span>
+                                <div style="font-size:14px;font-weight:800;color:#78350F;margin-top:2px;">${avgRateStr}</div>
+                            </div>
+                        </div>
+
+                        <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:16px;">
+                            <thead>
+                                <tr>
+                                    <th style="background:#0284C7;color:#FFFFFF;padding:8px;text-align:left;">Date</th>
+                                    <th style="background:#0284C7;color:#FFFFFF;padding:8px;text-align:left;">Category</th>
+                                    <th style="background:#0284C7;color:#FFFFFF;padding:8px;text-align:left;">Item Description</th>
+                                    <th style="background:#0284C7;color:#FFFFFF;padding:8px;text-align:right;">Qty</th>
+                                    <th style="background:#0284C7;color:#FFFFFF;padding:8px;text-align:right;">Unit</th>
+                                    <th style="background:#0284C7;color:#FFFFFF;padding:8px;text-align:right;">Rate</th>
+                                    <th style="background:#0284C7;color:#FFFFFF;padding:8px;text-align:right;">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody style="background:#F8FAFC;">
+                                ${rows || '<tr><td colspan="7" style="text-align:center;padding:16px;color:#94A3B8;">No purchase records found in selected period</td></tr>'}
+                                <tr style="background:#FFFFFF;font-weight:bold;border-top:2px solid #0284C7;">
+                                    <td colspan="5" style="padding:8px;"></td>
+                                    <td style="padding:8px;text-align:right;font-weight:bold;">Total Spend:</td>
+                                    <td style="padding:8px;text-align:right;font-weight:bold;color:#0284C7;">₹ ${formatINR(totalSpend)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div style="margin-top:20px;padding-top:12px;border-top:1px solid #E2E8F0;font-size:11px;color:#94A3B8;text-align:center;">
+                            To save this statement to your device, tap <strong>Save as PDF</strong> in the top bar.
+                        </div>
+                    `;
+
+                    const savePdfAction = () => {
+                        if (window.AndroidBridge && typeof window.AndroidBridge.generateItemReport === 'function') {
+                            showToast('⏳ Saving Item PDF to Downloads...');
+                            try {
+                                const rawResult = window.AndroidBridge.generateItemReport(JSON.stringify(state.expenses), targetItem, sDate, eDate);
+                                const result = JSON.parse(rawResult);
+                                if (result.success) {
+                                    showToast('✅ ' + (result.message || 'Item PDF saved to Downloads!'));
+                                } else {
+                                    showToast('❌ ' + (result.message || 'Failed to generate PDF'));
+                                }
+                            } catch (err) {
+                                showToast('✅ Item PDF saved to Downloads folder!');
+                            }
+                        } else {
+                            showToast('ℹ️ Save as PDF: Please use the Print option to save as PDF.');
+                        }
+                    };
+
+                    const printAction = () => {
+                        if (window.AndroidBridge && typeof window.AndroidBridge.printReport === 'function') {
+                            window.AndroidBridge.printReport(sheetHtml, `Item_Usage_${targetItem}_${sDate}_to_${eDate}`);
+                        } else {
+                            window.print();
+                        }
+                    };
+
+                    openReportViewer(`Item: ${targetItem}`, sheetHtml, savePdfAction, printAction);
                 });
             }
 

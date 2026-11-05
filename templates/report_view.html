@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detailed Expense Management Report ({{ start_str }} to {{ end_str }})</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #FFFFFF !important; padding: 0 !important; }
+            .report-card { box-shadow: none !important; border: none !important; margin: 0 !important; width: 100% !important; max-width: 100% !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+    <!-- Sticky Top Action Bar -->
+    <header class="no-print sticky top-0 z-50 bg-slate-900/95 backdrop-blur text-white px-4 py-3 shadow-lg border-b border-slate-700 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+            <span class="text-xl">📄</span>
+            <div>
+                <h1 class="text-sm sm:text-base font-bold leading-tight">Expense Report Preview</h1>
+                <p class="text-xs text-slate-400">Period: {{ start_date_formatted }} to {{ end_date_formatted }}</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <a href="{{ url_for('generate_report', start_date=start_str, end_date=end_str, include_itemwise='1' if include_itemwise else '0', save='1') }}"
+               class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-4 py-2 rounded-lg text-xs sm:text-sm shadow-md transition flex items-center gap-1.5 cursor-pointer">
+                <span>💾</span>
+                <span>Save as PDF</span>
+            </a>
+            <button onclick="window.print()" type="button"
+                    class="bg-slate-700 hover:bg-slate-600 text-white font-semibold px-3 py-2 rounded-lg text-xs sm:text-sm shadow transition flex items-center gap-1.5 cursor-pointer">
+                <span>🖨️</span>
+                <span>Print</span>
+            </button>
+            <button onclick="window.close()" type="button"
+                    class="bg-red-900/80 hover:bg-red-800 text-white font-semibold px-3 py-2 rounded-lg text-xs sm:text-sm shadow transition cursor-pointer">
+                ✖ Close
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Printable Sheet Container -->
+    <main class="max-w-4xl mx-auto my-6 p-4">
+        <div class="report-card bg-white rounded-2xl shadow-xl border border-slate-200 p-6 sm:p-10 space-y-6">
+            
+            <!-- Document Header -->
+            <div class="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl sm:text-3xl font-black text-indigo-950">Detailed Expense Management Report</h2>
+                    <p class="text-slate-500 text-sm mt-1">Period: <strong class="text-slate-700">{{ start_date_formatted }}</strong> to <strong class="text-slate-700">{{ end_date_formatted }}</strong></p>
+                </div>
+                <div class="bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-3 text-right self-start sm:self-auto">
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-700 block">Total Expenditure</span>
+                    <span class="text-2xl font-black text-indigo-950">₹ {{ "{:,.2f}".format(grand_total) }}</span>
+                </div>
+            </div>
+
+            <!-- Detailed Transactions Table -->
+            <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-2">Itemized Transactions</h3>
+                <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table class="w-full text-left text-xs sm:text-sm border-collapse">
+                        <thead>
+                            <tr class="bg-indigo-800 text-white uppercase text-[11px] tracking-wider">
+                                <th class="px-4 py-3">Date</th>
+                                <th class="px-4 py-3">Category</th>
+                                <th class="px-4 py-3">Item Description</th>
+                                <th class="px-4 py-3 text-right">Qty</th>
+                                <th class="px-4 py-3 text-right">Unit</th>
+                                <th class="px-4 py-3 text-right">Rate</th>
+                                <th class="px-4 py-3 text-right">Total Price</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            {% for exp in expenses %}
+                            <tr class="hover:bg-slate-50/80 transition">
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-600">{{ exp.date.strftime('%d-%m-%Y') }}</td>
+                                <td class="px-4 py-3 whitespace-nowrap">
+                                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 capitalize">
+                                        {{ exp.category }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 font-semibold text-slate-900">{{ exp.item_name }}</td>
+                                <td class="px-4 py-3 text-right whitespace-nowrap text-slate-700">{{ "{:g}".format(exp.quantity) }}</td>
+                                <td class="px-4 py-3 text-right whitespace-nowrap text-slate-500">{{ exp.unit }}</td>
+                                <td class="px-4 py-3 text-right whitespace-nowrap text-slate-700">₹ {{ "{:,.2f}".format(exp.rate) }}</td>
+                                <td class="px-4 py-3 text-right whitespace-nowrap font-bold text-slate-950">₹ {{ "{:,.2f}".format(exp.amount) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="px-4 py-8 text-center text-slate-400 italic">No expense records found in this date period.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="bg-slate-50 font-black text-slate-900 border-t-2 border-indigo-900">
+                                <td colspan="5" class="px-4 py-3 text-right">Grand Total:</td>
+                                <td colspan="2" class="px-4 py-3 text-right text-base text-indigo-950">₹ {{ "{:,.2f}".format(grand_total) }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Optional Item-wise Summary -->
+            {% if include_itemwise and itemwise_list %}
+            <div class="pt-4 border-t border-slate-200">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-teal-800 mb-2">Item-wise Spending Summary</h3>
+                <div class="overflow-x-auto border border-teal-200 rounded-xl">
+                    <table class="w-full text-left text-xs sm:text-sm border-collapse">
+                        <thead>
+                            <tr class="bg-teal-700 text-white uppercase text-[11px] tracking-wider">
+                                <th class="px-4 py-3">Item Description</th>
+                                <th class="px-4 py-3">Category</th>
+                                <th class="px-4 py-3 text-right">Total Qty</th>
+                                <th class="px-4 py-3 text-right">Unit</th>
+                                <th class="px-4 py-3 text-right">Total Spend</th>
+                                <th class="px-4 py-3 text-right">% of Total</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-teal-100 bg-teal-50/20">
+                            {% for it in itemwise_list %}
+                            <tr class="hover:bg-teal-50/50 transition">
+                                <td class="px-4 py-3 font-semibold text-slate-900">{{ it.name }}</td>
+                                <td class="px-4 py-3 whitespace-nowrap text-slate-600">{{ it.category }}</td>
+                                <td class="px-4 py-3 text-right whitespace-nowrap text-slate-700 font-medium">{{ "{:g}".format(it.quantity) }}</td>
+                                <td class="px-4 py-3 text-right whitespace-nowrap text-slate-500">{{ it.unit }}</td>
+                                <td class="px-4 py-3 text-right whitespace-nowrap font-bold text-teal-950">₹ {{ "{:,.2f}".format(it.amount) }}</td>
+                                <td class="px-4 py-3 text-right whitespace-nowrap text-slate-600 font-semibold">{{ "{:.1f}%".format(it.pct) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Footer Notes -->
+            <div class="pt-4 border-t border-slate-100 text-xs text-slate-400 flex flex-col sm:flex-row justify-between items-center gap-2">
+                <span>Expense Control Center • Statement Generated</span>
+                <span>Click <strong>Save as PDF</strong> above to download this statement to your device.</span>
+            </div>
+
+        </div>
+    </main>
+
+</body>
+</html>

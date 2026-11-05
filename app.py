@@ -17,7 +17,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Pre-defined categories
-CATEGORIES = ['grocery', 'vegetables', 'fish & meat', 'cosmetics', 'cleaning materials', 'miscellaneous']
+CATEGORIES = ['grocery', 'vegetables', 'fish & meat', 'milk products' 'cosmetics', 'cleaning materials', 'miscellaneous']
 # Standard list of standard units for selection
 UNITS = ['Kg', 'Gm', 'Litre', 'Ml', 'Pcs', 'Packet', 'Box']
 
@@ -300,7 +300,58 @@ def generate_report():
 
     doc.build(story)
     buffer.seek(0)
-    return send_file(buffer, as_attachment=True, download_name=f"Detailed_Report_{start_str}_to_{end_str}.pdf", mimetype='application/pdf')
+    save = request.args.get('save') in ['true', '1', 'on', 'yes'] or request.args.get('download') in ['true', '1', 'on', 'yes']
+    return send_file(buffer, as_attachment=save, download_name=f"Detailed_Report_{start_str}_to_{end_str}.pdf", mimetype='application/pdf')
+
+@app.route('/view_report', methods=['GET'])
+def view_report():
+    start_str = request.args.get('start_date')
+    end_str = request.args.get('end_date')
+    include_itemwise = request.args.get('include_itemwise') in ['true', '1', 'on', 'yes']
+
+    if not start_str or not end_str:
+        return "Please select a valid start and end date.", 400
+
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+    except ValueError:
+        return "Invalid date format.", 400
+
+    filtered_expenses = Expense.query.filter(Expense.date.between(start_date, end_date)).order_by(Expense.date.asc()).all()
+    grand_total = sum(e.amount for e in filtered_expenses)
+
+    itemwise_list = []
+    if include_itemwise and filtered_expenses:
+        itemwise_map = {}
+        for exp in filtered_expenses:
+            key = (exp.item_name, exp.category.title(), exp.unit)
+            if key not in itemwise_map:
+                itemwise_map[key] = {
+                    'name': exp.item_name,
+                    'category': exp.category.title(),
+                    'unit': exp.unit,
+                    'quantity': 0.0,
+                    'amount': 0.0
+                }
+            itemwise_map[key]['quantity'] += exp.quantity
+            itemwise_map[key]['amount'] += exp.amount
+
+        itemwise_list = sorted(itemwise_map.values(), key=lambda x: x['amount'], reverse=True)
+        for item in itemwise_list:
+            item['pct'] = (item['amount'] / grand_total * 100) if grand_total > 0 else 0.0
+
+    return render_template(
+        'report_view.html',
+        expenses=filtered_expenses,
+        grand_total=grand_total,
+        start_str=start_str,
+        end_str=end_str,
+        start_date_formatted=start_date.strftime('%d-%b-%Y'),
+        end_date_formatted=end_date.strftime('%d-%b-%Y'),
+        include_itemwise=include_itemwise,
+        itemwise_list=itemwise_list
+    )
 
 @app.route('/generate_item_report', methods=['GET'])
 def generate_item_report():
@@ -420,7 +471,66 @@ def generate_item_report():
     buffer.seek(0)
     clean_item = "".join(c for c in item_query if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
     filename = f"Item_Usage_{clean_item}_{start_str}_to_{end_str}.pdf"
-    return send_file(buffer, as_attachment=True, download_name=filename, mimetype='application/pdf')
+    save = request.args.get('save') in ['true', '1', 'on', 'yes'] or request.args.get('download') in ['true', '1', 'on', 'yes']
+    return send_file(buffer, as_attachment=save, download_name=filename, mimetype='application/pdf')
+
+@app.route('/view_item_report', methods=['GET'])
+def view_item_report():
+    item_query = request.args.get('item_name', '').strip()
+    start_str = request.args.get('start_date', '').strip()
+    end_str = request.args.get('end_date', '').strip()
+
+    if not item_query or not start_str or not end_str:
+        return "Please provide item name, start date, and end date.", 400
+
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+    except ValueError:
+        return "Invalid date format.", 400
+
+    expenses = Expense.query.filter(
+        Expense.date.between(start_date, end_date),
+        db.func.lower(Expense.item_name) == item_query.lower()
+    ).order_by(Expense.date.asc()).all()
+
+    if not expenses:
+        expenses = Expense.query.filter(
+            Expense.date.between(start_date, end_date),
+            Expense.item_name.ilike(f"%{item_query}%")
+        ).order_by(Expense.date.asc()).all()
+
+    total_spend = sum(exp.amount for exp in expenses)
+    unit_quantities = {}
+    for exp in expenses:
+        unit_quantities[exp.unit] = unit_quantities.get(exp.unit, 0.0) + exp.quantity
+
+    qty_parts = [f"{qty:g} {unit}" for unit, qty in unit_quantities.items()]
+    total_qty_str = ", ".join(qty_parts) if qty_parts else "0"
+
+    avg_rate_str = "₹ 0.00"
+    if len(unit_quantities) == 1:
+        unit = list(unit_quantities.keys())[0]
+        tot_q = list(unit_quantities.values())[0]
+        if tot_q > 0:
+            avg_rate_str = f"₹ {(total_spend / tot_q):,.2f} / {unit}"
+    elif expenses:
+        avg_r = sum(exp.rate for exp in expenses) / len(expenses)
+        avg_rate_str = f"₹ {avg_r:,.2f} (avg)"
+
+    return render_template(
+        'item_report_view.html',
+        item_name=item_query,
+        start_str=start_str,
+        end_str=end_str,
+        start_date_formatted=start_date.strftime('%d-%b-%Y'),
+        end_date_formatted=end_date.strftime('%d-%b-%Y'),
+        expenses=expenses,
+        total_spend=total_spend,
+        total_qty_str=total_qty_str,
+        purchases_count=len(expenses),
+        avg_rate_str=avg_rate_str
+    )
 
 @app.route('/sw.js', methods=['GET'])
 def service_worker():
