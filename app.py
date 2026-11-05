@@ -92,6 +92,91 @@ def get_items():
         return jsonify([item.item_name for item in items])
     return jsonify([])
 
+@app.route('/api/all_items', methods=['GET'])
+def get_all_items():
+    items = set()
+    for exp in Expense.query.with_entities(Expense.item_name).distinct():
+        if exp[0]:
+            items.add(exp[0].strip())
+    for ac in ItemAutocomplete.query.with_entities(ItemAutocomplete.item_name).distinct():
+        if ac[0]:
+            items.add(ac[0].strip())
+    return jsonify(sorted(list(items), key=lambda s: s.lower()))
+
+@app.route('/api/item_usage', methods=['GET'])
+def item_usage():
+    item_query = request.args.get('item_name', '').strip()
+    start_str = request.args.get('start_date', '').strip()
+    end_str = request.args.get('end_date', '').strip()
+
+    if not item_query:
+        return jsonify({'error': 'Please enter an item name'}), 400
+    if not start_str or not end_str:
+        return jsonify({'error': 'Please select start and end dates'}), 400
+
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format (expected YYYY-MM-DD)'}), 400
+
+    # First attempt exact case-insensitive match
+    expenses = Expense.query.filter(
+        Expense.date.between(start_date, end_date),
+        db.func.lower(Expense.item_name) == item_query.lower()
+    ).order_by(Expense.date.asc()).all()
+
+    # If no exact match, fallback to substring match
+    if not expenses:
+        expenses = Expense.query.filter(
+            Expense.date.between(start_date, end_date),
+            Expense.item_name.ilike(f"%{item_query}%")
+        ).order_by(Expense.date.asc()).all()
+
+    unit_quantities = {}
+    total_spend = 0.0
+    records = []
+
+    for exp in expenses:
+        total_spend += exp.amount
+        unit_quantities[exp.unit] = unit_quantities.get(exp.unit, 0.0) + exp.quantity
+        records.append({
+            'id': exp.id,
+            'date': exp.date.strftime('%Y-%m-%d'),
+            'date_formatted': exp.date.strftime('%d-%m-%Y'),
+            'category': exp.category.title(),
+            'item_name': exp.item_name,
+            'quantity': exp.quantity,
+            'unit': exp.unit,
+            'rate': exp.rate,
+            'amount': exp.amount
+        })
+
+    qty_parts = [f"{qty:g} {unit}" for unit, qty in unit_quantities.items()]
+    total_qty_str = ", ".join(qty_parts) if qty_parts else "0"
+
+    avg_rate_str = "₹ 0.00"
+    if len(unit_quantities) == 1:
+        unit = list(unit_quantities.keys())[0]
+        tot_q = list(unit_quantities.values())[0]
+        if tot_q > 0:
+            avg_rate_str = f"₹ {(total_spend / tot_q):,.2f} / {unit}"
+    elif records:
+        avg_r = sum(r['rate'] for r in records) / len(records)
+        avg_rate_str = f"₹ {avg_r:,.2f} (avg)"
+
+    return jsonify({
+        'item_name': item_query,
+        'matched_count': len(records),
+        'start_date': start_str,
+        'end_date': end_str,
+        'total_spend': total_spend,
+        'total_spend_formatted': f"₹ {total_spend:,.2f}",
+        'total_quantity_str': total_qty_str,
+        'avg_rate_str': avg_rate_str,
+        'records': records
+    })
+
 @app.route('/api/spending_summary', methods=['GET'])
 def spending_summary():
     expenses = Expense.query.order_by(Expense.date.asc()).all()
@@ -216,6 +301,126 @@ def generate_report():
     doc.build(story)
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name=f"Detailed_Report_{start_str}_to_{end_str}.pdf", mimetype='application/pdf')
+
+@app.route('/generate_item_report', methods=['GET'])
+def generate_item_report():
+    item_query = request.args.get('item_name', '').strip()
+    start_str = request.args.get('start_date', '').strip()
+    end_str = request.args.get('end_date', '').strip()
+
+    if not item_query or not start_str or not end_str:
+        return "Please provide item name, start date, and end date.", 400
+
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+    except ValueError:
+        return "Invalid date format.", 400
+
+    expenses = Expense.query.filter(
+        Expense.date.between(start_date, end_date),
+        db.func.lower(Expense.item_name) == item_query.lower()
+    ).order_by(Expense.date.asc()).all()
+
+    if not expenses:
+        expenses = Expense.query.filter(
+            Expense.date.between(start_date, end_date),
+            Expense.item_name.ilike(f"%{item_query}%")
+        ).order_by(Expense.date.asc()).all()
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=40)
+    story = []
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('ReportTitle', parent=styles['Heading1'], fontSize=18, spaceAfter=6, textColor=colors.HexColor('#1E3A8A'))
+    subtitle_style = ParagraphStyle('ReportSubtitle', parent=styles['Normal'], fontSize=11, spaceAfter=15, textColor=colors.HexColor('#4A5568'))
+
+    story.append(Paragraph(f"Item Usage Statement: {item_query.title()}", title_style))
+    story.append(Paragraph(f"Period: {start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}", subtitle_style))
+
+    unit_quantities = {}
+    total_spend = 0.0
+    for exp in expenses:
+        total_spend += exp.amount
+        unit_quantities[exp.unit] = unit_quantities.get(exp.unit, 0.0) + exp.quantity
+
+    qty_parts = [f"{qty:g} {unit}" for unit, qty in unit_quantities.items()]
+    total_qty_str = ", ".join(qty_parts) if qty_parts else "0"
+
+    avg_rate_str = "₹ 0.00"
+    if len(unit_quantities) == 1:
+        unit = list(unit_quantities.keys())[0]
+        tot_q = list(unit_quantities.values())[0]
+        if tot_q > 0:
+            avg_rate_str = f"₹ {(total_spend / tot_q):,.2f} / {unit}"
+    elif expenses:
+        avg_r = sum(exp.rate for exp in expenses) / len(expenses)
+        avg_rate_str = f"₹ {avg_r:,.2f} (avg)"
+
+    # Summary KPI banner table
+    kpi_data = [
+        ["Total Quantity Used", "Total Spend", "Purchases Count", "Average Rate"],
+        [total_qty_str, f"₹ {total_spend:,.2f}", str(len(expenses)), avg_rate_str]
+    ]
+    kpi_table = Table(kpi_data, colWidths=[135, 135, 135, 145])
+    kpi_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E3A8A')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#EEF2FF')),
+        ('TEXTCOLOR', (0, 1), (-1, 1), colors.HexColor('#1E3A8A')),
+        ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 1), (-1, 1), 11),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#C7D2FE')),
+    ]))
+    story.append(kpi_table)
+    story.append(Spacer(1, 16))
+
+    # Detailed item purchase table
+    data = [["Date", "Category", "Item Description", "Qty", "Unit", "Rate", "Total Spend"]]
+    for exp in expenses:
+        data.append([
+            exp.date.strftime('%d-%m-%Y'),
+            exp.category.title(),
+            exp.item_name,
+            f"{exp.quantity:g}",
+            exp.unit,
+            f"{exp.rate:,.2f}",
+            f"{exp.amount:,.2f}"
+        ])
+
+    if not expenses:
+        data.append(["-", "No records found in this period", "-", "-", "-", "-", "0.00"])
+    else:
+        data.append(["", "", "", "", "", "Total:", f"{total_spend:,.2f}"])
+
+    table = Table(data, colWidths=[65, 85, 140, 35, 45, 85, 95])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0284C7')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (2, -1), 'LEFT'),
+        ('ALIGN', (3, 0), (-1, -1), 'RIGHT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9.5),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+        ('TOPPADDING', (0, 0), (-1, 0), 6),
+        ('BACKGROUND', (0, 1), (-1, -2), colors.HexColor('#F8FAFC')),
+        ('GRID', (0, 0), (-1, -2), 0.5, colors.HexColor('#E2E8F0')),
+        ('FONTNAME', (-2, -1), (-1, -1), 'Helvetica-Bold'),
+        ('LINEABOVE', (-2, -1), (-1, -1), 1.5, colors.HexColor('#0284C7')),
+    ]))
+    story.append(table)
+
+    doc.build(story)
+    buffer.seek(0)
+    clean_item = "".join(c for c in item_query if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
+    filename = f"Item_Usage_{clean_item}_{start_str}_to_{end_str}.pdf"
+    return send_file(buffer, as_attachment=True, download_name=filename, mimetype='application/pdf')
 
 @app.route('/sw.js', methods=['GET'])
 def service_worker():

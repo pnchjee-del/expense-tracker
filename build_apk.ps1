@@ -66,3 +66,4 @@ Write-Host "9. Verifying signatures..."
 
 Write-Host "Build complete! APKs generated:"
 Get-Item "ExpenseTracker.apk", "update.apk", "static\update.apk" | Select-Object Name, Length, LastWriteTime | Format-Table -AutoSize
+

@@ -156,6 +156,53 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String generateItemReport(final String jsonExpenses, final String itemName, final String startDate, final String endDate) {
+            final PdfReportGenerator.PdfResult result = PdfReportGenerator.createItemUsageReport(context, jsonExpenses, itemName, startDate, endDate);
+
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (result.success) {
+                        Toast.makeText(MainActivity.this, "✅ " + result.message, Toast.LENGTH_LONG).show();
+
+                        if (result.uri != null) {
+                            try {
+                                Intent intent = new Intent(Intent.ACTION_VIEW);
+                                intent.setDataAndType(result.uri, "application/pdf");
+                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                Intent chooser = Intent.createChooser(intent, "Open Item Usage PDF");
+                                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                startActivity(chooser);
+                            } catch (Exception viewEx) {
+                                try {
+                                    Intent share = new Intent(Intent.ACTION_SEND);
+                                    share.setType("application/pdf");
+                                    share.putExtra(Intent.EXTRA_STREAM, result.uri);
+                                    share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                    share.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    startActivity(Intent.createChooser(share, "Share Item Usage PDF"));
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                    } else {
+                        Toast.makeText(MainActivity.this, "❌ Failed to generate PDF: " + result.message, Toast.LENGTH_LONG).show();
+                    }
+                }
+            });
+
+            try {
+                JSONObject response = new JSONObject();
+                response.put("success", result.success);
+                response.put("fileName", result.fileName);
+                response.put("message", result.message);
+                return response.toString();
+            } catch (Exception e) {
+                return "{\"success\":" + result.success + "}";
+            }
+        }
+
+        @JavascriptInterface
         public void printReport(final String htmlContent, final String jobName) {
             runOnUiThread(new Runnable() {
                 @Override

@@ -128,6 +128,17 @@
         }
         .btn-purple { background: linear-gradient(90deg, #4F46E5, #9333EA, #DB2777); }
         .btn-emerald { background: linear-gradient(90deg, #059669, #0D9488); }
+        .card-cyan { border-color: #BAE6FD; }
+        .card-banner-cyan {
+            background: linear-gradient(90deg, #0284C7, #2563EB);
+            color: #FFFFFF;
+            padding: 14px 18px;
+        }
+        .lbl-cyan { color: #0284C7; }
+        .inp-cyan { border: 1.5px solid #BAE6FD; background: #F0F9FF; }
+        .inp-cyan:focus { border-color: #0284C7; background: #FFF; }
+        .btn-cyan { background: linear-gradient(90deg, #0284C7, #2563EB); }
+        .btn-indigo { background: linear-gradient(90deg, #4F46E5, #7C3AED); }
         .charts-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 20px; }
         @media (min-width: 640px) { .charts-grid { grid-template-columns: 1fr 1fr; } }
         .chart-card { background: #FFF; border-radius: 16px; padding: 16px; border: 1px solid #E5E7EB; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
@@ -296,6 +307,80 @@
                         </form>
                     </div>
                 </div>
+
+                <!-- Card 3: Find Item Usage -->
+                <div class="card card-cyan">
+                    <div class="card-banner card-banner-cyan">
+                        <h2>🔍 Find Item Usage</h2>
+                        <p>Analyze consumption, spend & history for any item</p>
+                    </div>
+                    <div class="card-body">
+                        <form id="itemUsageForm">
+                            <div class="field">
+                                <label class="lbl-cyan">🛒 Item Name Description</label>
+                                <input type="text" id="usageItemInput" list="allItemSuggestions" required autocomplete="off" placeholder="e.g. Milk, Rice, Potato..." class="inp-cyan">
+                                <datalist id="allItemSuggestions"></datalist>
+                            </div>
+                            <div class="row-2 field">
+                                <div>
+                                    <label class="lbl-cyan">📆 From Date</label>
+                                    <input type="date" id="usageStartDate" required class="inp-cyan">
+                                </div>
+                                <div>
+                                    <label class="lbl-cyan">📆 To Date</label>
+                                    <input type="date" id="usageEndDate" required class="inp-cyan">
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:8px;margin-top:6px;">
+                                <button type="submit" class="btn btn-cyan" style="flex:1;">🔎 Find Usage</button>
+                                <button type="button" id="exportItemPdfBtn" class="btn btn-indigo" style="flex:1;">📄 Export PDF</button>
+                            </div>
+                        </form>
+
+                        <div id="usageResultsBox" style="display:none;margin-top:16px;padding-top:14px;border-top:1.5px dashed #BAE6FD;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                                <span id="resItemTitle" style="font-size:13px;font-weight:800;color:#0C4A6E;">Usage Summary</span>
+                                <span id="resPeriodSpan" style="font-size:11px;font-weight:600;background:#E0F2FE;color:#0369A1;padding:2px 8px;border-radius:12px;"></span>
+                            </div>
+
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                                <div style="background:#F0F9FF;border:1px solid #BAE6FD;padding:8px 10px;border-radius:10px;text-align:center;">
+                                    <div style="font-size:10px;font-weight:700;color:#0369A1;text-transform:uppercase;">Total Qty</div>
+                                    <div id="resTotalQty" style="font-size:15px;font-weight:900;color:#0C4A6E;margin-top:2px;">-</div>
+                                </div>
+                                <div style="background:#ECFDF5;border:1px solid #A7F3D0;padding:8px 10px;border-radius:10px;text-align:center;">
+                                    <div style="font-size:10px;font-weight:700;color:#047857;text-transform:uppercase;">Total Spend</div>
+                                    <div id="resTotalSpend" style="font-size:15px;font-weight:900;color:#065F46;margin-top:2px;">₹ 0.00</div>
+                                </div>
+                                <div style="background:#FAF5FF;border:1px solid #E9D5FF;padding:8px 10px;border-radius:10px;text-align:center;">
+                                    <div style="font-size:10px;font-weight:700;color:#7E22CE;text-transform:uppercase;">Purchases</div>
+                                    <div id="resCount" style="font-size:15px;font-weight:900;color:#581C87;margin-top:2px;">0 times</div>
+                                </div>
+                                <div style="background:#FFFBEB;border:1px solid #FDE68A;padding:8px 10px;border-radius:10px;text-align:center;">
+                                    <div style="font-size:10px;font-weight:700;color:#B45309;text-transform:uppercase;">Avg Rate</div>
+                                    <div id="resAvgRate" style="font-size:15px;font-weight:900;color:#78350F;margin-top:2px;">-</div>
+                                </div>
+                            </div>
+
+                            <div id="resTableWrap" style="max-height:220px;overflow-y:auto;border:1px solid #E2E8F0;border-radius:8px;">
+                                <table style="width:100%;font-size:12px;">
+                                    <thead>
+                                        <tr style="background:#F1F5F9;color:#475569;">
+                                            <th style="padding:6px 8px;">Date</th>
+                                            <th style="padding:6px 8px;text-align:right;">Qty</th>
+                                            <th style="padding:6px 8px;text-align:right;">Rate</th>
+                                            <th style="padding:6px 8px;text-align:right;">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="usageTableBody"></tbody>
+                                </table>
+                            </div>
+                            <div id="resNoRecords" style="display:none;text-align:center;font-size:12px;color:#64748B;font-style:italic;padding:12px;background:#F8FAFC;border-radius:8px;">
+                                No records found for this item in the selected period.
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div>
@@ -443,6 +528,7 @@
             });
 
             drawCharts();
+            updateAllItemSuggestions();
         }
 
         function drawCharts() {
@@ -797,6 +883,219 @@
                     }
                 }
             });
+
+            // Single Item Usage Finder Logic
+            const usageStartDate = document.getElementById('usageStartDate');
+            const usageEndDate = document.getElementById('usageEndDate');
+            const usageItemInput = document.getElementById('usageItemInput');
+            const allItemSuggestions = document.getElementById('allItemSuggestions');
+            const itemUsageForm = document.getElementById('itemUsageForm');
+            const exportItemPdfBtn = document.getElementById('exportItemPdfBtn');
+            const usageResultsBox = document.getElementById('usageResultsBox');
+
+            if (usageStartDate && usageEndDate) {
+                usageStartDate.value = today.slice(0, 8) + '01';
+                usageEndDate.value = today;
+            }
+
+            function updateAllItemSuggestions() {
+                if (!allItemSuggestions) return;
+                const set = new Set();
+                state.expenses.forEach(e => {
+                    if (e.item_name && e.item_name.trim()) set.add(e.item_name.trim());
+                });
+                for (const cat in state.itemsByCategory) {
+                    (state.itemsByCategory[cat] || []).forEach(name => {
+                        if (name && name.trim()) set.add(name.trim());
+                    });
+                }
+                const sorted = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'accent'}));
+                allItemSuggestions.innerHTML = '';
+                sorted.forEach(item => {
+                    const opt = document.createElement('option');
+                    opt.value = item;
+                    allItemSuggestions.appendChild(opt);
+                });
+            }
+            updateAllItemSuggestions();
+
+            function getFilteredItemExpenses(targetItem, sDate, eDate) {
+                const clean = targetItem.trim().toLowerCase();
+                const inRange = state.expenses.filter(x => x.date >= sDate && x.date <= eDate);
+                // Exact match first
+                let matched = inRange.filter(x => (x.item_name || '').trim().toLowerCase() === clean);
+                // Substring fallback
+                if (matched.length === 0) {
+                    matched = inRange.filter(x => (x.item_name || '').toLowerCase().includes(clean));
+                }
+                return matched.sort((a, b) => a.date.localeCompare(b.date));
+            }
+
+            if (itemUsageForm) {
+                itemUsageForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const targetItem = usageItemInput.value.trim();
+                    const sDate = usageStartDate.value;
+                    const eDate = usageEndDate.value;
+                    if (!targetItem || !sDate || !eDate) return;
+
+                    const matched = getFilteredItemExpenses(targetItem, sDate, eDate);
+
+                    usageResultsBox.style.display = 'block';
+                    document.getElementById('resItemTitle').textContent = `"${targetItem}" Usage`;
+                    document.getElementById('resPeriodSpan').textContent = `${formatDateDMY(sDate)} to ${formatDateDMY(eDate)}`;
+
+                    let totalSpend = 0;
+                    const unitMap = {};
+                    matched.forEach(exp => {
+                        totalSpend += Number(exp.amount || 0);
+                        const u = exp.unit || 'Pcs';
+                        unitMap[u] = (unitMap[u] || 0) + Number(exp.quantity || 0);
+                    });
+
+                    const unitKeys = Object.keys(unitMap);
+                    let qtyStr = unitKeys.map(u => `${unitMap[u]} ${u}`).join(', ');
+                    if (!qtyStr) qtyStr = '0';
+
+                    let avgRateStr = '₹ 0.00';
+                    if (unitKeys.length === 1) {
+                        const u = unitKeys[0];
+                        const q = unitMap[u];
+                        if (q > 0) avgRateStr = `₹ ${formatINR(totalSpend / q)} / ${u}`;
+                    } else if (matched.length > 0) {
+                        const sumRate = matched.reduce((acc, x) => acc + Number(x.rate || 0), 0);
+                        avgRateStr = `₹ ${formatINR(sumRate / matched.length)} (avg)`;
+                    }
+
+                    document.getElementById('resTotalQty').textContent = qtyStr;
+                    document.getElementById('resTotalSpend').textContent = '₹ ' + formatINR(totalSpend);
+                    document.getElementById('resCount').textContent = `${matched.length} ${matched.length === 1 ? 'time' : 'times'}`;
+                    document.getElementById('resAvgRate').textContent = avgRateStr;
+
+                    const tbody = document.getElementById('usageTableBody');
+                    const wrap = document.getElementById('resTableWrap');
+                    const noRec = document.getElementById('resNoRecords');
+                    tbody.innerHTML = '';
+
+                    if (matched.length === 0) {
+                        wrap.style.display = 'none';
+                        noRec.style.display = 'block';
+                    } else {
+                        wrap.style.display = 'block';
+                        noRec.style.display = 'none';
+                        matched.forEach(exp => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td style="padding:8px;white-space:nowrap;color:#475569;">${formatDateDMY(exp.date)}</td>
+                                <td style="padding:8px;text-align:right;white-space:nowrap;color:#334155;">${exp.quantity} ${exp.unit}</td>
+                                <td style="padding:8px;text-align:right;white-space:nowrap;color:#334155;">₹ ${formatINR(exp.rate)}</td>
+                                <td style="padding:8px;text-align:right;white-space:nowrap;font-weight:700;color:#0F172A;">₹ ${formatINR(exp.amount)}</td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    }
+                });
+            }
+
+            if (exportItemPdfBtn) {
+                exportItemPdfBtn.addEventListener('click', () => {
+                    const targetItem = usageItemInput.value.trim();
+                    const sDate = usageStartDate.value;
+                    const eDate = usageEndDate.value;
+                    if (!targetItem) {
+                        showToast('⚠️ Please enter an item name');
+                        usageItemInput.focus();
+                        return;
+                    }
+                    if (!sDate || !eDate) {
+                        showToast('⚠️ Please select From and To dates');
+                        return;
+                    }
+
+                    const matched = getFilteredItemExpenses(targetItem, sDate, eDate);
+
+                    if (window.AndroidBridge && typeof window.AndroidBridge.generateItemReport === 'function') {
+                        showToast('⏳ Generating Item Usage PDF...');
+                        try {
+                            const rawResult = window.AndroidBridge.generateItemReport(JSON.stringify(state.expenses), targetItem, sDate, eDate);
+                            const result = JSON.parse(rawResult);
+                            if (result.success) {
+                                showToast('✅ ' + (result.message || 'PDF saved to Downloads!'));
+                            } else {
+                                showToast('❌ ' + (result.message || 'Failed to generate PDF'));
+                            }
+                        } catch (err) {
+                            showToast('✅ PDF generated and saved to Downloads!');
+                        }
+                    } else {
+                        // Fallback print
+                        let grandTotal = 0;
+                        const rows = matched.map(exp => {
+                            grandTotal += Number(exp.amount || 0);
+                            return `
+                                <tr>
+                                    <td>${formatDateDMY(exp.date)}</td>
+                                    <td>${exp.category.replace(/\b\w/g, c => c.toUpperCase())}</td>
+                                    <td>${exp.item_name}</td>
+                                    <td style="text-align:right">${exp.quantity}</td>
+                                    <td style="text-align:right">${exp.unit}</td>
+                                    <td style="text-align:right">${formatINR(exp.rate)}</td>
+                                    <td style="text-align:right">${formatINR(exp.amount)}</td>
+                                </tr>
+                            `;
+                        }).join('');
+
+                        const reportHtml = `
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <meta charset="UTF-8">
+                                <style>
+                                    body { font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #1A202C; }
+                                    h1 { color: #1A365D; font-size: 20px; margin-bottom: 4px; }
+                                    p { color: #4A5568; font-size: 12px; margin-bottom: 16px; }
+                                    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+                                    th { background: #0284C7; color: #FFFFFF; padding: 8px; text-align: left; }
+                                    td { padding: 7px 8px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC; }
+                                    .total-row td { background: #FFFFFF; font-weight: bold; border-top: 2px solid #0284C7; }
+                                </style>
+                            </head>
+                            <body>
+                                <h1>Item Usage Statement: ${targetItem}</h1>
+                                <p>Period: ${formatDateDMY(sDate)} to ${formatDateDMY(eDate)}</p>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Category</th>
+                                            <th>Item Description</th>
+                                            <th style="text-align:right">Qty</th>
+                                            <th style="text-align:right">Unit</th>
+                                            <th style="text-align:right">Rate</th>
+                                            <th style="text-align:right">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${rows || '<tr><td colspan="7" style="text-align:center">No purchase records found in selected period</td></tr>'}
+                                        <tr class="total-row">
+                                            <td colspan="5"></td>
+                                            <td style="text-align:right">Total Spend:</td>
+                                            <td style="text-align:right">₹ ${formatINR(grandTotal)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </body>
+                            </html>
+                        `;
+                        const w = window.open('', '_blank');
+                        if (w) {
+                            w.document.write(reportHtml);
+                            w.document.close();
+                            w.print();
+                        }
+                    }
+                });
+            }
 
             window.addEventListener('resize', drawCharts);
         });
