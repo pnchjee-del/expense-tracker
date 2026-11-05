@@ -21,7 +21,7 @@
             <span class="text-xl">📄</span>
             <div>
                 <h1 class="text-sm sm:text-base font-bold leading-tight">Expense Report Preview</h1>
-                <p class="text-xs text-slate-400">Period: {{ start_date_formatted }} to {{ end_date_formatted }}</p>
+                <p class="text-xs text-slate-400">Period: {{ period_label }}</p>
             </div>
         </div>
 
@@ -51,7 +51,7 @@
             <div class="border-b border-slate-200 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 class="text-2xl sm:text-3xl font-black text-indigo-950">Detailed Expense Management Report</h2>
-                    <p class="text-slate-500 text-sm mt-1">Period: <strong class="text-slate-700">{{ start_date_formatted }}</strong> to <strong class="text-slate-700">{{ end_date_formatted }}</strong></p>
+                    <p class="text-slate-500 text-sm mt-1">Period: <strong class="text-slate-700">{{ period_label }}</strong></p>
                 </div>
                 <div class="bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-3 text-right self-start sm:self-auto">
                     <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-700 block">Total Expenditure</span>
@@ -109,7 +109,7 @@
             <!-- Optional Item-wise Summary -->
             {% if include_itemwise and itemwise_list %}
             <div class="pt-4 border-t border-slate-200">
-                <h3 class="text-sm font-bold uppercase tracking-wider text-teal-800 mb-2">Item-wise Spending Summary</h3>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-teal-800 mb-2">Item-wise Spending Summary (Per Single Item)</h3>
                 <div class="overflow-x-auto border border-teal-200 rounded-xl">
                     <table class="w-full text-left text-xs sm:text-sm border-collapse">
                         <thead>
@@ -117,7 +117,6 @@
                                 <th class="px-4 py-3">Item Description</th>
                                 <th class="px-4 py-3">Category</th>
                                 <th class="px-4 py-3 text-right">Total Qty</th>
-                                <th class="px-4 py-3 text-right">Unit</th>
                                 <th class="px-4 py-3 text-right">Total Spend</th>
                                 <th class="px-4 py-3 text-right">% of Total</th>
                             </tr>
@@ -127,8 +126,7 @@
                             <tr class="hover:bg-teal-50/50 transition">
                                 <td class="px-4 py-3 font-semibold text-slate-900">{{ it.name }}</td>
                                 <td class="px-4 py-3 whitespace-nowrap text-slate-600">{{ it.category }}</td>
-                                <td class="px-4 py-3 text-right whitespace-nowrap text-slate-700 font-medium">{{ "{:g}".format(it.quantity) }}</td>
-                                <td class="px-4 py-3 text-right whitespace-nowrap text-slate-500">{{ it.unit }}</td>
+                                <td class="px-4 py-3 text-right whitespace-nowrap text-slate-700 font-medium">{{ it.qty_str }}</td>
                                 <td class="px-4 py-3 text-right whitespace-nowrap font-bold text-teal-950">₹ {{ "{:,.2f}".format(it.amount) }}</td>
                                 <td class="px-4 py-3 text-right whitespace-nowrap text-slate-600 font-semibold">{{ "{:.1f}%".format(it.pct) }}</td>
                             </tr>
@@ -150,3 +148,4 @@
 
 </body>
 </html>
+

@@ -111,27 +111,25 @@ def item_usage():
 
     if not item_query:
         return jsonify({'error': 'Please enter an item name'}), 400
-    if not start_str or not end_str:
-        return jsonify({'error': 'Please select start and end dates'}), 400
 
-    try:
-        start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
-        end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({'error': 'Invalid date format (expected YYYY-MM-DD)'}), 400
+    query = Expense.query
+    period_label = "All Time"
+
+    if start_str and end_str:
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+            query = query.filter(Expense.date.between(start_date, end_date))
+            period_label = f"{start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}"
+        except ValueError:
+            pass
 
     # First attempt exact case-insensitive match
-    expenses = Expense.query.filter(
-        Expense.date.between(start_date, end_date),
-        db.func.lower(Expense.item_name) == item_query.lower()
-    ).order_by(Expense.date.asc()).all()
+    expenses = query.filter(db.func.lower(Expense.item_name) == item_query.lower()).order_by(Expense.date.asc()).all()
 
     # If no exact match, fallback to substring match
     if not expenses:
-        expenses = Expense.query.filter(
-            Expense.date.between(start_date, end_date),
-            Expense.item_name.ilike(f"%{item_query}%")
-        ).order_by(Expense.date.asc()).all()
+        expenses = query.filter(Expense.item_name.ilike(f"%{item_query}%")).order_by(Expense.date.asc()).all()
 
     unit_quantities = {}
     total_spend = 0.0
@@ -165,9 +163,12 @@ def item_usage():
         avg_r = sum(r['rate'] for r in records) / len(records)
         avg_rate_str = f"₹ {avg_r:,.2f} (avg)"
 
+    display_name = expenses[0].item_name if expenses else item_query
+
     return jsonify({
-        'item_name': item_query,
+        'item_name': display_name,
         'matched_count': len(records),
+        'period_label': period_label,
         'start_date': start_str,
         'end_date': end_str,
         'total_spend': total_spend,
@@ -175,6 +176,83 @@ def item_usage():
         'total_quantity_str': total_qty_str,
         'avg_rate_str': avg_rate_str,
         'records': records
+    })
+
+@app.route('/api/report_data', methods=['GET'])
+def api_report_data():
+    start_str = request.args.get('start_date', '').strip()
+    end_str = request.args.get('end_date', '').strip()
+    include_itemwise = request.args.get('include_itemwise') in ['true', '1', 'on', 'yes']
+
+    query = Expense.query
+    period_label = "All Time"
+
+    if start_str and end_str:
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+            query = query.filter(Expense.date.between(start_date, end_date))
+            period_label = f"{start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}"
+        except ValueError:
+            pass
+
+    expenses = query.order_by(Expense.date.asc()).all()
+    grand_total = sum(e.amount for e in expenses)
+
+    itemwise_map = {}
+    records = []
+    for exp in expenses:
+        records.append({
+            'date': exp.date.strftime('%d-%m-%Y'),
+            'category': exp.category.title(),
+            'item_name': exp.item_name,
+            'quantity': exp.quantity,
+            'unit': exp.unit,
+            'rate': exp.rate,
+            'amount': exp.amount
+        })
+        # Group strictly per single item name
+        name_key = exp.item_name.strip().lower()
+        if name_key not in itemwise_map:
+            itemwise_map[name_key] = {
+                'name': exp.item_name.strip(),
+                'category': exp.category.title(),
+                'units': {},
+                'amount': 0.0,
+                'count': 0
+            }
+        itemwise_map[name_key]['amount'] += exp.amount
+        itemwise_map[name_key]['count'] += 1
+        u_map = itemwise_map[name_key]['units']
+        u_map[exp.unit] = u_map.get(exp.unit, 0.0) + exp.quantity
+
+    itemwise_list = []
+    if include_itemwise and itemwise_map:
+        sorted_items = sorted(itemwise_map.values(), key=lambda x: x['amount'], reverse=True)
+        for it in sorted_items:
+            q_parts = [f"{q:g} {u}" for u, q in it['units'].items()]
+            q_str = ", ".join(q_parts) if q_parts else "0"
+            pct = (it['amount'] / grand_total * 100) if grand_total > 0 else 0.0
+            itemwise_list.append({
+                'name': it['name'],
+                'category': it['category'],
+                'qty_str': q_str,
+                'amount': it['amount'],
+                'amount_formatted': f"₹ {it['amount']:,.2f}",
+                'pct': f"{pct:.1f}%",
+                'count': it['count']
+            })
+
+    return jsonify({
+        'grand_total': grand_total,
+        'grand_total_formatted': f"₹ {grand_total:,.2f}",
+        'count': len(records),
+        'period_label': period_label,
+        'start_str': start_str,
+        'end_str': end_str,
+        'expenses': records,
+        'include_itemwise': include_itemwise,
+        'itemwise_list': itemwise_list
     })
 
 @app.route('/api/spending_summary', methods=['GET'])
@@ -198,16 +276,23 @@ def spending_summary():
 
 @app.route('/generate_report', methods=['GET'])
 def generate_report():
-    start_str = request.args.get('start_date')
-    end_str = request.args.get('end_date')
+    start_str = request.args.get('start_date', '').strip()
+    end_str = request.args.get('end_date', '').strip()
     include_itemwise = request.args.get('include_itemwise') in ['true', '1', 'on', 'yes']
 
-    if not start_str or not end_str:
-        return "Please select a valid start and end date.", 400
+    query = Expense.query
+    period_label = "All Time"
 
-    start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
-    end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
-    filtered_expenses = Expense.query.filter(Expense.date.between(start_date, end_date)).order_by(Expense.date.asc()).all()
+    if start_str and end_str:
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+            query = query.filter(Expense.date.between(start_date, end_date))
+            period_label = f"{start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}"
+        except ValueError:
+            pass
+
+    filtered_expenses = query.order_by(Expense.date.asc()).all()
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=40)
@@ -218,7 +303,7 @@ def generate_report():
     subtitle_style = ParagraphStyle('ReportSubtitle', parent=styles['Normal'], fontSize=11, spaceAfter=20, textColor=colors.HexColor('#4A5568'))
 
     story.append(Paragraph("Detailed Expense Management Report", title_style))
-    story.append(Paragraph(f"Period: {start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}", subtitle_style))
+    story.append(Paragraph(f"Period: {period_label}", subtitle_style))
 
     # Extended layout table columns to handle math fields
     data = [["Date", "Category", "Item Description", "Qty", "Unit", "Rate", "Total Price"]]
@@ -237,12 +322,17 @@ def generate_report():
         ])
         grand_total += exp.amount
 
-        # Item-wise aggregation
-        key = (exp.item_name, exp.category.title(), exp.unit)
+        # Summarised strictly per single item
+        key = exp.item_name.strip().lower()
         if key not in itemwise_map:
-            itemwise_map[key] = {'quantity': 0.0, 'amount': 0.0}
-        itemwise_map[key]['quantity'] += exp.quantity
+            itemwise_map[key] = {
+                'name': exp.item_name.strip(),
+                'category': exp.category.title(),
+                'units': {},
+                'amount': 0.0
+            }
         itemwise_map[key]['amount'] += exp.amount
+        itemwise_map[key]['units'][exp.unit] = itemwise_map[key]['units'].get(exp.unit, 0.0) + exp.quantity
 
     data.append(["", "", "", "", "", "Grand Total:", f"{grand_total:,.2f}"])
 
@@ -264,26 +354,27 @@ def generate_report():
 
     story.append(table)
 
-    # Optional Item-wise Summary Table if requested
+    # Optional Item-wise Summary Table if requested (summarised per single item)
     if include_itemwise and itemwise_map:
         story.append(Spacer(1, 20))
         section_style = ParagraphStyle('SectionHeading', parent=styles['Heading2'], fontSize=13, spaceAfter=8, textColor=colors.HexColor('#1A365D'))
-        story.append(Paragraph("Item-wise Spending Summary", section_style))
+        story.append(Paragraph("Item-wise Spending Summary (Per Single Item)", section_style))
 
-        summary_data = [["Item Description", "Category", "Total Qty", "Unit", "Total Spend", "% of Total"]]
-        sorted_items = sorted(itemwise_map.items(), key=lambda x: x[1]['amount'], reverse=True)
-        for (name, cat, unit), vals in sorted_items:
-            pct = (vals['amount'] / grand_total * 100) if grand_total > 0 else 0.0
+        summary_data = [["Item Description", "Category", "Total Qty", "Total Spend", "% of Total"]]
+        sorted_items = sorted(itemwise_map.values(), key=lambda x: x['amount'], reverse=True)
+        for it in sorted_items:
+            pct = (it['amount'] / grand_total * 100) if grand_total > 0 else 0.0
+            q_parts = [f"{q:g} {u}" for u, q in it['units'].items()]
+            q_str = ", ".join(q_parts) if q_parts else "0"
             summary_data.append([
-                name,
-                cat,
-                f"{vals['quantity']:g}",
-                unit,
-                f"{vals['amount']:,.2f}",
+                it['name'],
+                it['category'],
+                q_str,
+                f"{it['amount']:,.2f}",
                 f"{pct:.1f}%"
             ])
 
-        summary_table = Table(summary_data, colWidths=[140, 95, 60, 45, 85, 55])
+        summary_table = Table(summary_data, colWidths=[160, 110, 100, 95, 65])
         summary_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F766E')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -301,45 +392,66 @@ def generate_report():
     doc.build(story)
     buffer.seek(0)
     save = request.args.get('save') in ['true', '1', 'on', 'yes'] or request.args.get('download') in ['true', '1', 'on', 'yes']
-    return send_file(buffer, as_attachment=save, download_name=f"Detailed_Report_{start_str}_to_{end_str}.pdf", mimetype='application/pdf')
+    file_label = f"{start_str}_to_{end_str}" if (start_str and end_str) else "All_Time"
+    return send_file(buffer, as_attachment=save, download_name=f"Detailed_Report_{file_label}.pdf", mimetype='application/pdf')
 
 @app.route('/view_report', methods=['GET'])
 def view_report():
-    start_str = request.args.get('start_date')
-    end_str = request.args.get('end_date')
+    start_str = request.args.get('start_date', '').strip()
+    end_str = request.args.get('end_date', '').strip()
     include_itemwise = request.args.get('include_itemwise') in ['true', '1', 'on', 'yes']
 
-    if not start_str or not end_str:
-        return "Please select a valid start and end date.", 400
+    query = Expense.query
+    period_label = "All Time"
+    start_date_formatted = "All Time"
+    end_date_formatted = "All Time"
 
-    try:
-        start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
-        end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
-    except ValueError:
-        return "Invalid date format.", 400
+    if start_str and end_str:
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+            query = query.filter(Expense.date.between(start_date, end_date))
+            start_date_formatted = start_date.strftime('%d-%b-%Y')
+            end_date_formatted = end_date.strftime('%d-%b-%Y')
+            period_label = f"{start_date_formatted} to {end_date_formatted}"
+        except ValueError:
+            pass
 
-    filtered_expenses = Expense.query.filter(Expense.date.between(start_date, end_date)).order_by(Expense.date.asc()).all()
+    filtered_expenses = query.order_by(Expense.date.asc()).all()
     grand_total = sum(e.amount for e in filtered_expenses)
 
     itemwise_list = []
     if include_itemwise and filtered_expenses:
         itemwise_map = {}
         for exp in filtered_expenses:
-            key = (exp.item_name, exp.category.title(), exp.unit)
+            key = exp.item_name.strip().lower()
             if key not in itemwise_map:
                 itemwise_map[key] = {
-                    'name': exp.item_name,
+                    'name': exp.item_name.strip(),
                     'category': exp.category.title(),
-                    'unit': exp.unit,
-                    'quantity': 0.0,
-                    'amount': 0.0
+                    'units': {},
+                    'amount': 0.0,
+                    'count': 0
                 }
-            itemwise_map[key]['quantity'] += exp.quantity
             itemwise_map[key]['amount'] += exp.amount
+            itemwise_map[key]['count'] += 1
+            itemwise_map[key]['units'][exp.unit] = itemwise_map[key]['units'].get(exp.unit, 0.0) + exp.quantity
 
-        itemwise_list = sorted(itemwise_map.values(), key=lambda x: x['amount'], reverse=True)
-        for item in itemwise_list:
-            item['pct'] = (item['amount'] / grand_total * 100) if grand_total > 0 else 0.0
+        sorted_items = sorted(itemwise_map.values(), key=lambda x: x['amount'], reverse=True)
+        for it in sorted_items:
+            pct = (it['amount'] / grand_total * 100) if grand_total > 0 else 0.0
+            q_parts = [f"{q:g} {u}" for u, q in it['units'].items()]
+            q_str = ", ".join(q_parts) if q_parts else "0"
+            itemwise_list.append({
+                'name': it['name'],
+                'category': it['category'],
+                'qty_str': q_str,
+                'quantity': sum(it['units'].values()),
+                'unit': q_str,
+                'amount': it['amount'],
+                'pct': pct,
+                'count': it['count']
+            })
 
     return render_template(
         'report_view.html',
@@ -347,8 +459,9 @@ def view_report():
         grand_total=grand_total,
         start_str=start_str,
         end_str=end_str,
-        start_date_formatted=start_date.strftime('%d-%b-%Y'),
-        end_date_formatted=end_date.strftime('%d-%b-%Y'),
+        start_date_formatted=start_date_formatted,
+        end_date_formatted=end_date_formatted,
+        period_label=period_label,
         include_itemwise=include_itemwise,
         itemwise_list=itemwise_list
     )
@@ -359,25 +472,25 @@ def generate_item_report():
     start_str = request.args.get('start_date', '').strip()
     end_str = request.args.get('end_date', '').strip()
 
-    if not item_query or not start_str or not end_str:
-        return "Please provide item name, start date, and end date.", 400
+    if not item_query:
+        return "Please provide an item name.", 400
 
-    try:
-        start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
-        end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
-    except ValueError:
-        return "Invalid date format.", 400
+    query = Expense.query
+    period_label = "All Time"
 
-    expenses = Expense.query.filter(
-        Expense.date.between(start_date, end_date),
-        db.func.lower(Expense.item_name) == item_query.lower()
-    ).order_by(Expense.date.asc()).all()
+    if start_str and end_str:
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+            query = query.filter(Expense.date.between(start_date, end_date))
+            period_label = f"{start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}"
+        except ValueError:
+            pass
+
+    expenses = query.filter(db.func.lower(Expense.item_name) == item_query.lower()).order_by(Expense.date.asc()).all()
 
     if not expenses:
-        expenses = Expense.query.filter(
-            Expense.date.between(start_date, end_date),
-            Expense.item_name.ilike(f"%{item_query}%")
-        ).order_by(Expense.date.asc()).all()
+        expenses = query.filter(Expense.item_name.ilike(f"%{item_query}%")).order_by(Expense.date.asc()).all()
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=40, bottomMargin=40)
@@ -387,8 +500,9 @@ def generate_item_report():
     title_style = ParagraphStyle('ReportTitle', parent=styles['Heading1'], fontSize=18, spaceAfter=6, textColor=colors.HexColor('#1E3A8A'))
     subtitle_style = ParagraphStyle('ReportSubtitle', parent=styles['Normal'], fontSize=11, spaceAfter=15, textColor=colors.HexColor('#4A5568'))
 
-    story.append(Paragraph(f"Item Usage Statement: {item_query.title()}", title_style))
-    story.append(Paragraph(f"Period: {start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}", subtitle_style))
+    display_name = expenses[0].item_name if expenses else item_query
+    story.append(Paragraph(f"Item Usage Statement: {display_name.title()}", title_style))
+    story.append(Paragraph(f"Period: {period_label}", subtitle_style))
 
     unit_quantities = {}
     total_spend = 0.0
@@ -469,8 +583,9 @@ def generate_item_report():
 
     doc.build(story)
     buffer.seek(0)
-    clean_item = "".join(c for c in item_query if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
-    filename = f"Item_Usage_{clean_item}_{start_str}_to_{end_str}.pdf"
+    clean_item = "".join(c for c in display_name if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
+    date_part = f"{start_str}_to_{end_str}" if (start_str and end_str) else "All_Time"
+    filename = f"Item_Usage_{clean_item}_{date_part}.pdf"
     save = request.args.get('save') in ['true', '1', 'on', 'yes'] or request.args.get('download') in ['true', '1', 'on', 'yes']
     return send_file(buffer, as_attachment=save, download_name=filename, mimetype='application/pdf')
 
@@ -480,25 +595,31 @@ def view_item_report():
     start_str = request.args.get('start_date', '').strip()
     end_str = request.args.get('end_date', '').strip()
 
-    if not item_query or not start_str or not end_str:
-        return "Please provide item name, start date, and end date.", 400
+    if not item_query:
+        return "Please provide an item name.", 400
 
-    try:
-        start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
-        end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
-    except ValueError:
-        return "Invalid date format.", 400
+    query = Expense.query
+    start_date_formatted = "All Time"
+    end_date_formatted = "All Time"
+    period_label = "All Time"
 
-    expenses = Expense.query.filter(
-        Expense.date.between(start_date, end_date),
-        db.func.lower(Expense.item_name) == item_query.lower()
-    ).order_by(Expense.date.asc()).all()
+    if start_str and end_str:
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+            query = query.filter(Expense.date.between(start_date, end_date))
+            start_date_formatted = start_date.strftime('%d-%b-%Y')
+            end_date_formatted = end_date.strftime('%d-%b-%Y')
+            period_label = f"{start_date_formatted} to {end_date_formatted}"
+        except ValueError:
+            pass
+
+    expenses = query.filter(db.func.lower(Expense.item_name) == item_query.lower()).order_by(Expense.date.asc()).all()
 
     if not expenses:
-        expenses = Expense.query.filter(
-            Expense.date.between(start_date, end_date),
-            Expense.item_name.ilike(f"%{item_query}%")
-        ).order_by(Expense.date.asc()).all()
+        expenses = query.filter(Expense.item_name.ilike(f"%{item_query}%")).order_by(Expense.date.asc()).all()
+
+    display_name = expenses[0].item_name if expenses else item_query
 
     total_spend = sum(exp.amount for exp in expenses)
     unit_quantities = {}
@@ -520,11 +641,12 @@ def view_item_report():
 
     return render_template(
         'item_report_view.html',
-        item_name=item_query,
+        item_name=display_name,
         start_str=start_str,
         end_str=end_str,
-        start_date_formatted=start_date.strftime('%d-%b-%Y'),
-        end_date_formatted=end_date.strftime('%d-%b-%Y'),
+        start_date_formatted=start_date_formatted,
+        end_date_formatted=end_date_formatted,
+        period_label=period_label,
         expenses=expenses,
         total_spend=total_spend,
         total_qty_str=total_qty_str,

@@ -21,7 +21,7 @@
             <span class="text-xl">🔍</span>
             <div>
                 <h1 class="text-sm sm:text-base font-bold leading-tight">Item Usage Statement: {{ item_name }}</h1>
-                <p class="text-xs text-slate-400">Period: {{ start_date_formatted }} to {{ end_date_formatted }}</p>
+                <p class="text-xs text-slate-400">Period: {{ period_label }}</p>
             </div>
         </div>
 
@@ -52,7 +52,7 @@
                 <div>
                     <span class="text-xs font-bold uppercase tracking-wider text-sky-700 block mb-1">Single Item Usage Statement</span>
                     <h2 class="text-2xl sm:text-3xl font-black text-slate-900">{{ item_name.title() }}</h2>
-                    <p class="text-slate-500 text-sm mt-1">Period: <strong class="text-slate-700">{{ start_date_formatted }}</strong> to <strong class="text-slate-700">{{ end_date_formatted }}</strong></p>
+                    <p class="text-slate-500 text-sm mt-1">Period: <strong class="text-slate-700">{{ period_label }}</strong></p>
                 </div>
                 <div class="bg-sky-50 border border-sky-200 rounded-xl px-5 py-3 text-right self-start sm:self-auto">
                     <span class="text-[11px] font-bold uppercase tracking-wider text-sky-700 block">Total Spend on Item</span>
@@ -138,3 +138,4 @@
 
 </body>
 </html>
+

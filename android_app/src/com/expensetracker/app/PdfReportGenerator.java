@@ -58,6 +58,7 @@ public class PdfReportGenerator {
         String unit;
         double quantity;
         double amount;
+        Map<String, Double> units = new LinkedHashMap<>();
     }
 
     public static PdfResult createReport(Context context, String jsonExpenses, String startDate, String endDate) {
@@ -84,26 +85,33 @@ public class PdfReportGenerator {
                 grandTotal += item.amount;
             }
 
-            // Aggregate item-wise summary if requested
+            // Aggregate item-wise summary strictly per single item
             List<ItemSummary> summaryList = new ArrayList<>();
             if (includeItemwise && !items.isEmpty()) {
                 Map<String, ItemSummary> summaryMap = new LinkedHashMap<>();
                 for (ExpenseItem item : items) {
-                    String key = item.itemName.toLowerCase(Locale.ENGLISH).trim() + "||" +
-                                 item.category.toLowerCase(Locale.ENGLISH).trim() + "||" +
-                                 item.unit.trim();
+                    String key = item.itemName.toLowerCase(Locale.ENGLISH).trim();
                     ItemSummary sum = summaryMap.get(key);
                     if (sum == null) {
                         sum = new ItemSummary();
-                        sum.itemName = item.itemName;
+                        sum.itemName = item.itemName.trim();
                         sum.category = item.category;
-                        sum.unit = item.unit;
-                        sum.quantity = 0.0;
                         sum.amount = 0.0;
                         summaryMap.put(key, sum);
                     }
-                    sum.quantity += item.quantity;
                     sum.amount += item.amount;
+                    Double prevQ = sum.units.get(item.unit);
+                    sum.units.put(item.unit, (prevQ == null ? 0.0 : prevQ) + item.quantity);
+                }
+                for (ItemSummary s : summaryMap.values()) {
+                    StringBuilder sb = new StringBuilder();
+                    for (Map.Entry<String, Double> e : s.units.entrySet()) {
+                        if (sb.length() > 0) sb.append(", ");
+                        double q = e.getValue();
+                        String qStr = (q == (long) q) ? String.valueOf((long) q) : String.format(Locale.ENGLISH, "%.2f", q);
+                        sb.append(qStr).append(" ").append(e.getKey());
+                    }
+                    s.unit = sb.toString();
                 }
                 summaryList.addAll(summaryMap.values());
                 Collections.sort(summaryList, new Comparator<ItemSummary>() {
@@ -460,9 +468,12 @@ public class PdfReportGenerator {
             double totalSpend = 0.0;
             Map<String, Double> unitMap = new LinkedHashMap<>();
 
+            boolean hasDateRange = startDate != null && !startDate.trim().isEmpty() && !startDate.equalsIgnoreCase("all") &&
+                                   endDate != null && !endDate.trim().isEmpty() && !endDate.equalsIgnoreCase("all");
+
             // 1. Exact match attempt (case-insensitive)
             for (ExpenseItem exp : allItems) {
-                if (exp.date.compareTo(startDate) >= 0 && exp.date.compareTo(endDate) <= 0) {
+                if (!hasDateRange || (exp.date.compareTo(startDate) >= 0 && exp.date.compareTo(endDate) <= 0)) {
                     if (exp.itemName.trim().equalsIgnoreCase(cleanTarget)) {
                         items.add(exp);
                     }
@@ -473,7 +484,7 @@ public class PdfReportGenerator {
             if (items.isEmpty()) {
                 String lowerTarget = cleanTarget.toLowerCase(Locale.ENGLISH);
                 for (ExpenseItem exp : allItems) {
-                    if (exp.date.compareTo(startDate) >= 0 && exp.date.compareTo(endDate) <= 0) {
+                    if (!hasDateRange || (exp.date.compareTo(startDate) >= 0 && exp.date.compareTo(endDate) <= 0)) {
                         if (exp.itemName.toLowerCase(Locale.ENGLISH).contains(lowerTarget)) {
                             items.add(exp);
                         }
@@ -615,7 +626,7 @@ public class PdfReportGenerator {
 
             // Page 1 Header
             canvas.drawText("Item Usage Statement: " + capitalize(cleanTarget), LEFT_MARGIN, 52, titlePaint);
-            String sub = "Period: " + formatDate(startDate) + " to " + formatDate(endDate);
+            String sub = hasDateRange ? ("Period: " + formatDate(startDate) + " to " + formatDate(endDate)) : "Period: All Time (All Records)";
             canvas.drawText(sub, LEFT_MARGIN, 70, subtitlePaint);
 
             // KPI 4-block banner
@@ -733,7 +744,8 @@ public class PdfReportGenerator {
             document.finishPage(page);
 
             String safeItem = cleanTarget.replaceAll("[^a-zA-Z0-9_\\-]", "_");
-            String fileName = "Item_Usage_" + safeItem + "_" + startDate + "_to_" + endDate + ".pdf";
+            String fileDate = hasDateRange ? (startDate + "_to_" + endDate) : "All_Time";
+            String fileName = "Item_Usage_" + safeItem + "_" + fileDate + ".pdf";
             Uri resultUri = null;
             boolean savedPublicly = false;
 
